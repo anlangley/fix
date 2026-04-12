@@ -1,0 +1,15 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\app\\(auth)",
+    "\\app\\(tabs)",
+    "\\app\\(tabs)\\booking",
+    "\\assets",
+    "\\assets\\images",
+    "\\components",
+    "\\hooks",
+    "\\scripts"
+  ],
+  "PreviewInSolutionExplorer": false
+}
