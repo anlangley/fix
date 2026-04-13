@@ -1,13 +1,19 @@
-import React, { useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Dimensions, Image, FlatList, ImageBackground,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { AppColors, Gradients, Shadows, Radius, Spacing, Typography } from '../../constants/theme';
+import React, { useEffect, useState } from 'react';
+import {
+  Dimensions, Image,
+  ImageBackground,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { AppColors, Gradients, Radius, Shadows, Spacing, Typography } from '../../constants/theme';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiClient } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.7;
@@ -81,6 +87,26 @@ const StarRating = ({ rating, size = 14 }: { rating: number; size?: number }) =>
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
+
+  const [featuredRooms, setFeaturedRooms] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchFeaturedRooms();
+  }, []);
+
+  const fetchFeaturedRooms = async () => {
+    try {
+      const response = await apiClient.get('/rooms?limit=5');
+      if (response.data?.success) {
+        setFeaturedRooms(response.data.data.rooms);
+      }
+    } catch (error) {
+      console.log('Error fetching rooms:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -183,45 +209,49 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingLeft: Spacing.lg, paddingRight: Spacing.sm }}
         >
-          {FEATURED_ROOMS.map((room) => (
-            <TouchableOpacity
-              key={room.id}
-              style={styles.roomCard}
-              activeOpacity={0.9}
-              onPress={() => router.push(`/(tabs)/rooms/${room.id}`)}
-            >
-              <View style={styles.roomImageContainer}>
-                <Image source={room.image} style={styles.roomImage} />
-                {room.badge && (
-                  <View style={[
-                    styles.roomBadge,
-                    { backgroundColor: room.badge === 'Hot Deal' ? AppColors.danger : AppColors.accent }
-                  ]}>
-                    <Text style={styles.roomBadgeText}>{room.badge}</Text>
+          {isLoading ? (
+            <Text style={{ padding: 20 }}>Đang tải phòng...</Text>
+          ) : featuredRooms.map((room) => {
+            const primaryImage = room.images?.find((img: any) => img.isPrimary)?.url || room.images?.[0]?.url || 'https://via.placeholder.com/300x200';
+            const location = room.location;
+
+            return (
+              <TouchableOpacity
+                key={room.id}
+                style={styles.roomCard}
+                activeOpacity={0.9}
+                onPress={() => router.push(`/(tabs)/rooms/${room.id}`)}
+              >
+                <View style={styles.roomImageContainer}>
+                  <Image source={{ uri: primaryImage }} style={styles.roomImage} />
+                  {room.pricePerNight < 3000000 && (
+                    <View style={[styles.roomBadge, { backgroundColor: AppColors.danger }]}>
+                      <Text style={styles.roomBadgeText}>Hot Deal</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.heartBtn}>
+                    <Ionicons name="heart-outline" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.roomInfo}>
+                  <Text style={styles.roomName} numberOfLines={1}>{room.name}</Text>
+                  <View style={styles.roomLocationRow}>
+                    <Ionicons name="location-outline" size={14} color={AppColors.textSecondary} />
+                    <Text style={styles.roomLocation}>{location}</Text>
                   </View>
-                )}
-                <TouchableOpacity style={styles.heartBtn}>
-                  <Ionicons name="heart-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.roomInfo}>
-                <Text style={styles.roomName} numberOfLines={1}>{room.name}</Text>
-                <View style={styles.roomLocationRow}>
-                  <Ionicons name="location-outline" size={14} color={AppColors.textSecondary} />
-                  <Text style={styles.roomLocation}>{room.location}</Text>
+                  <View style={styles.roomRatingRow}>
+                    <StarRating rating={Number(room.avgRating) || 5.0} />
+                    <Text style={styles.roomRatingText}>{Number(room.avgRating) || 5.0}</Text>
+                    <Text style={styles.roomReviews}>({room.reviewCount || 0})</Text>
+                  </View>
+                  <View style={styles.roomPriceRow}>
+                    <Text style={styles.roomPrice}>{Number(room.pricePerNight).toLocaleString('vi-VN')}đ</Text>
+                    <Text style={styles.roomPerNight}>/đêm</Text>
+                  </View>
                 </View>
-                <View style={styles.roomRatingRow}>
-                  <StarRating rating={room.rating} />
-                  <Text style={styles.roomRatingText}>{room.rating}</Text>
-                  <Text style={styles.roomReviews}>({room.reviews})</Text>
-                </View>
-                <View style={styles.roomPriceRow}>
-                  <Text style={styles.roomPrice}>{room.price}đ</Text>
-                  <Text style={styles.roomPerNight}>/đêm</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 

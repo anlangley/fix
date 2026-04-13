@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, Alert, Modal, Dimensions,
+  Image, Alert, Modal, Dimensions, ActivityIndicator, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../../constants/theme';
+import { apiClient } from '../../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -18,16 +19,99 @@ const PAYMENT_METHODS = [
 ];
 
 export default function PaymentScreen() {
+  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
-  const [selectedMethod, setSelectedMethod] = useState('momo');
-  const [showSuccess, setShowSuccess] = useState(false);
 
-  const handlePayment = () => {
-    setShowSuccess(true);
+  const [booking, setBooking] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedMethod, setSelectedMethod] = useState('momo');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrData, setQrData] = useState<any>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [pollingInterval, setPollingInterval] = useState<any>(null);
+
+  useEffect(() => {
+    if (bookingId) {
+      fetchBookingDetails();
+    }
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [bookingId]);
+
+  const fetchBookingDetails = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.get(`/payments/status/${bookingId}`);
+      if (response.data?.success) {
+        setBooking(response.data.data.booking);
+      }
+    } catch (error) {
+      console.error('Error fetching booking for payment:', error);
+      Alert.alert('Lỗi', 'Không thể lấy thông tin đơn hàng.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const total = 5500000;
-  const formatCurrency = (n: number) => n.toLocaleString('vi-VN');
+  const startPolling = () => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await apiClient.get(`/payments/status/${bookingId}`);
+        if (response.data?.success && response.data.data.booking.paymentStatus === 'PAID') {
+          clearInterval(interval);
+          setPollingInterval(null);
+          setShowQRModal(false);
+          setShowSuccess(true);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 3000);
+    setPollingInterval(interval);
+  };
+
+  const handlePayment = async () => {
+    if (selectedMethod !== 'momo') {
+      Alert.alert('Thông báo', 'Phương thức này đang được bảo trì. Vui lòng chọn MoMo.');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      const response = await apiClient.post('/payments/momo/create', { bookingId });
+
+      if (response.data?.success) {
+        setQrData(response.data.data);
+        setShowQRModal(true);
+        startPolling(); // Bắt đầu kiểm tra trạng thái thanh toán tự động
+      }
+    } catch (error: any) {
+      console.error('Momo creation failed:', error);
+      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleOpenMomo = () => {
+    if (qrData?.payUrl) {
+      Linking.openURL(qrData.payUrl);
+    }
+  };
+
+  const formatCurrency = (n: number) => Number(n || 0).toLocaleString('vi-VN');
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={AppColors.primary} />
+      </View>
+    );
+  }
+
+  const total = Number(booking?.totalPrice || 0);
 
   return (
     <View style={styles.container}>
@@ -47,23 +131,23 @@ export default function PaymentScreen() {
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Phòng</Text>
-              <Text style={styles.summaryValue}>Deluxe Ocean View</Text>
+              <Text style={styles.summaryValue}>{booking?.room?.name}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Check-in</Text>
-              <Text style={styles.summaryValue}>15/04/2026 (14:00)</Text>
+              <Text style={styles.summaryValue}>{new Date(booking.checkInDate).toLocaleDateString('vi-VN')}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Check-out</Text>
-              <Text style={styles.summaryValue}>17/04/2026 (12:00)</Text>
+              <Text style={styles.summaryValue}>{new Date(booking.checkOutDate).toLocaleDateString('vi-VN')}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Số đêm</Text>
-              <Text style={styles.summaryValue}>2 đêm</Text>
+              <Text style={styles.summaryValue}>{booking.nightCount} đêm</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Khách</Text>
-              <Text style={styles.summaryValue}>2 người lớn</Text>
+              <Text style={styles.summaryLabel}>Phòng x Khách</Text>
+              <Text style={styles.summaryValue}>{booking.roomsCount} x {booking.guestsCount}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
@@ -114,21 +198,78 @@ export default function PaymentScreen() {
           <Text style={styles.bottomLabel}>Thanh toán qua</Text>
           <Text style={styles.bottomMethod}>{PAYMENT_METHODS.find(m => m.id === selectedMethod)?.name}</Text>
         </View>
-        <TouchableOpacity activeOpacity={0.8} onPress={handlePayment}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handlePayment}
+          disabled={isProcessing}
+        >
           <LinearGradient
             colors={[AppColors.success, '#059669']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={styles.payBtn}
+            style={[styles.payBtn, isProcessing && { opacity: 0.7 }]}
           >
-            <Ionicons name="shield-checkmark" size={20} color="#fff" />
-            <Text style={styles.payBtnText}>Xác nhận {formatCurrency(total)}đ</Text>
+            {isProcessing ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="shield-checkmark" size={20} color="#fff" />
+                <Text style={styles.payBtnText}>Xác nhận {formatCurrency(total)}đ</Text>
+              </>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </View>
 
+      {/* QR Code Modal */}
+      <Modal visible={showQRModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={{ alignSelf: 'flex-end', padding: 10 }}
+              onPress={() => {
+                setShowQRModal(false);
+                if (pollingInterval) clearInterval(pollingInterval);
+              }}
+            >
+              <Ionicons name="close" size={24} color={AppColors.textSecondary} />
+            </TouchableOpacity>
+
+            <Image source={require('../../../assets/images/momo-logo.png')} style={{ width: 60, height: 60, marginBottom: 10 }} />
+            <Text style={styles.successTitle}>Quét mã MoMo</Text>
+            <Text style={[styles.successDesc, { marginBottom: 20 }]}>
+              Dùng ứng dụng MoMo để quét mã QR bên dưới để hoàn tất thanh toán.
+            </Text>
+
+            <View style={{ padding: 20, backgroundColor: '#fff', borderRadius: Radius.lg, ...Shadows.medium }}>
+              {qrData?.qrCodeUrl ? (
+                <Image source={{ uri: qrData.qrCodeUrl }} style={{ width: 220, height: 220 }} />
+              ) : (
+                <ActivityIndicator size="large" color={AppColors.primary} />
+              )}
+            </View>
+
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: AppColors.primary, marginTop: 20 }}>
+              {formatCurrency(total)}đ
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.successBtn, { backgroundColor: '#A50064' }]}
+              onPress={handleOpenMomo}
+            >
+              <Text style={[styles.successBtnText, { color: '#fff' }]}>Mở ứng dụng MoMo</Text>
+            </TouchableOpacity>
+
+            <Text style={{ marginTop: 20, fontSize: 12, color: AppColors.textLight }}>
+              Hệ thống đang kiểm tra trạng thái thanh toán...
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Success Modal */}
       <Modal visible={showSuccess} transparent animationType="fade">
+
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.successCircle}>

@@ -1,92 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, Dimensions, FlatList,
+  Image, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../../constants/theme';
+import { apiClient } from '../../../services/api';
 
 const { width } = Dimensions.get('window');
-
-// ═══════════════════════════════════════
-// ROOM DATA
-// ═══════════════════════════════════════
-const ROOMS_DB: Record<string, any> = {
-  '1': {
-    name: 'Phòng Deluxe Ocean View', type: 'Phòng Đôi',
-    price: '2.500.000', location: 'Đà Nẵng',
-    rating: 4.8, reviews: 124,
-    images: [
-      require('../../../assets/images/room1.jpg'),
-      require('../../../assets/images/nn1.jpg'),
-      require('../../../assets/images/nn3.jpg'),
-    ],
-    description: 'Phòng Deluxe rộng rãi với tầm nhìn ra biển tuyệt đẹp. Được trang bị đầy đủ tiện nghi cao cấp, nội thất sang trọng và ban công riêng để bạn tận hưởng khung cảnh hoàng hôn tráng lệ. Diện tích 45m², tối đa 2 khách.',
-    amenities: [
-      { icon: 'wifi', label: 'WiFi miễn phí' },
-      { icon: 'tv', label: 'Smart TV 55"' },
-      { icon: 'snow-outline', label: 'Điều hòa' },
-      { icon: 'water-outline', label: 'Hồ bơi' },
-      { icon: 'restaurant-outline', label: 'Bữa sáng' },
-      { icon: 'car-outline', label: 'Đỗ xe' },
-      { icon: 'wine-outline', label: 'Minibar' },
-      { icon: 'fitness-outline', label: 'Phòng Gym' },
-    ],
-  },
-  '2': {
-    name: 'Suite Tổng Thống', type: 'Suite',
-    price: '8.000.000', location: 'Hà Nội',
-    rating: 4.9, reviews: 89,
-    images: [
-      require('../../../assets/images/room2.jpg'),
-      require('../../../assets/images/nn2.jpg'),
-      require('../../../assets/images/nn1.jpg'),
-    ],
-    description: 'Suite Tổng Thống – đẳng cấp 5 sao với phòng khách riêng biệt, phòng ngủ master và phòng tắm Jacuzzi. Dịch vụ Butler 24/7, view toàn cảnh thành phố. Diện tích 120m², tối đa 4 khách.',
-    amenities: [
-      { icon: 'wifi', label: 'WiFi tốc độ cao' },
-      { icon: 'tv', label: 'Smart TV 65"' },
-      { icon: 'snow-outline', label: 'Điều hòa' },
-      { icon: 'water-outline', label: 'Jacuzzi riêng' },
-      { icon: 'restaurant-outline', label: 'Ẩm thực VIP' },
-      { icon: 'car-outline', label: 'Xe đưa đón' },
-      { icon: 'wine-outline', label: 'Rượu chào mừng' },
-      { icon: 'fitness-outline', label: 'Spa & Gym' },
-    ],
-  },
-};
-
-const DEFAULT_ROOM = {
-  name: 'Phòng Cao Cấp', type: 'Phòng Đơn',
-  price: '1.500.000', location: 'Việt Nam',
-  rating: 4.5, reviews: 50,
-  images: [
-    require('../../../assets/images/room3.jpg'),
-    require('../../../assets/images/nn3.jpg'),
-  ],
-  description: 'Phòng được thiết kế hiện đại, ấm cúng với đầy đủ tiện nghi. Vị trí thuận lợi, giao thông dễ dàng. Diện tích 30m².',
-  amenities: [
-    { icon: 'wifi', label: 'WiFi' },
-    { icon: 'tv', label: 'TV' },
-    { icon: 'snow-outline', label: 'Điều hòa' },
-    { icon: 'restaurant-outline', label: 'Bữa sáng' },
-  ],
-};
-
-const MOCK_REVIEWS = [
-  { id: '1', name: 'Nguyễn Văn A', avatar: '👨', rating: 5, date: '05/03/2026', comment: 'Phòng rất đẹp, view tuyệt vời! Nhân viên phục vụ chu đáo. Chắc chắn sẽ quay lại.' },
-  { id: '2', name: 'Trần Thị B', avatar: '👩', rating: 4, date: '28/02/2026', comment: 'Phòng sạch sẽ, tiện nghi đầy đủ. Vị trí rất thuận tiện để di chuyển. Hơi ồn vào cuối tuần.' },
-  { id: '3', name: 'Lê Minh C', avatar: '👨‍💼', rating: 5, date: '15/02/2026', comment: 'Trải nghiệm tuyệt vời cho kỳ nghỉ gia đình. Bữa sáng đa dạng và ngon.' },
-];
 
 const StarRating = ({ rating, size = 14 }: { rating: number; size?: number }) => (
   <View style={{ flexDirection: 'row', gap: 2 }}>
     {[1, 2, 3, 4, 5].map((star) => (
       <Ionicons
         key={star}
-        name={star <= Math.floor(rating) ? 'star' : star - 0.5 <= rating ? 'star-half' : 'star-outline'}
+        name={star <= Math.floor(rating) ? 'star' : star - 0.5 <= Math.floor(rating + 0.5) ? 'star-half' : 'star-outline'}
         size={size}
         color={AppColors.star}
       />
@@ -95,12 +25,58 @@ const StarRating = ({ rating, size = 14 }: { rating: number; size?: number }) =>
 );
 
 export default function RoomDetail() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [room, setRoom] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  const room = ROOMS_DB[id as string] || DEFAULT_ROOM;
+  useEffect(() => {
+    fetchRoomDetail();
+  }, [id]);
+
+  const fetchRoomDetail = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.get(`/rooms/${id}`);
+      if (response.data?.success) {
+        setRoom(response.data.data.room);
+      }
+    } catch (error) {
+      console.error('Error fetching room detail:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={AppColors.primary} />
+        <Text style={{ marginTop: 10, color: AppColors.textSecondary }}>Đang tải thông tin phòng...</Text>
+      </View>
+    );
+  }
+
+  if (!room) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Ionicons name="alert-circle-outline" size={64} color={AppColors.danger} />
+        <Text style={{ fontSize: 18, fontWeight: 'bold', marginTop: 16 }}>Không tìm thấy phòng!</Text>
+        <TouchableOpacity style={{ marginTop: 20 }} onPress={() => router.back()}>
+          <Text style={{ color: AppColors.accent }}>Quay lại</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const roomImages = room.images?.length > 0 
+    ? room.images.map((img: any) => ({ uri: img.url }))
+    : [require('../../../assets/images/room1.jpg')];
+  
+  const amenities = room.amenities || [];
+  const reviews = room.reviews || [];
 
   return (
     <View style={styles.container}>
@@ -116,10 +92,11 @@ export default function RoomDetail() {
               setActiveImageIndex(idx);
             }}
           >
-            {room.images.map((img: any, idx: number) => (
+            {roomImages.map((img: any, idx: number) => (
               <Image key={idx} source={img} style={styles.galleryImage} />
             ))}
           </ScrollView>
+
 
           {/* Overlay buttons */}
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -167,9 +144,9 @@ export default function RoomDetail() {
           </View>
 
           <View style={styles.ratingRow}>
-            <StarRating rating={room.rating} size={16} />
-            <Text style={styles.ratingValue}>{room.rating}</Text>
-            <Text style={styles.reviewCount}>({room.reviews} đánh giá)</Text>
+            <StarRating rating={room.avgRating || 0} size={16} />
+            <Text style={styles.ratingValue}>{room.avgRating || 0}</Text>
+            <Text style={styles.reviewCount}>({room.reviewCount || 0} đánh giá)</Text>
           </View>
         </View>
 
@@ -183,12 +160,12 @@ export default function RoomDetail() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tiện nghi</Text>
           <View style={styles.amenitiesGrid}>
-            {room.amenities.map((amenity: any, idx: number) => (
+            {amenities.map((amenity: any, idx: number) => (
               <View key={idx} style={styles.amenityCard}>
                 <View style={styles.amenityIconContainer}>
-                  <Ionicons name={amenity.icon} size={22} color={AppColors.primary} />
+                  <Ionicons name={amenity.icon || 'help-outline'} size={22} color={AppColors.primary} />
                 </View>
-                <Text style={styles.amenityLabel}>{amenity.label}</Text>
+                <Text style={styles.amenityLabel}>{amenity.name || amenity.label}</Text>
               </View>
             ))}
           </View>
@@ -200,25 +177,34 @@ export default function RoomDetail() {
             <Text style={styles.sectionTitle}>Đánh giá</Text>
             <View style={styles.overallRating}>
               <Ionicons name="star" size={16} color={AppColors.star} />
-              <Text style={styles.overallRatingText}>{room.rating}/5</Text>
+              <Text style={styles.overallRatingText}>{room.avgRating || 0}/5</Text>
             </View>
           </View>
 
-          {MOCK_REVIEWS.map((review) => (
+          {reviews.map((review: any) => (
             <View key={review.id} style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
                 <View style={styles.reviewAvatar}>
-                  <Text style={{ fontSize: 24 }}>{review.avatar}</Text>
+                  {review.user?.avatarUrl ? (
+                    <Image source={{ uri: review.user.avatarUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                  ) : (
+                    <Text style={{ fontSize: 24 }}>👤</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.reviewName}>{review.name}</Text>
-                  <Text style={styles.reviewDate}>{review.date}</Text>
+                  <Text style={styles.reviewName}>{review.user?.name || 'Ẩn danh'}</Text>
+                  <Text style={styles.reviewDate}>{review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : ''}</Text>
                 </View>
                 <StarRating rating={review.rating} size={12} />
               </View>
               <Text style={styles.reviewComment}>{review.comment}</Text>
             </View>
           ))}
+          {reviews.length === 0 && (
+            <Text style={{ textAlign: 'center', color: AppColors.textLight, marginTop: 20 }}>
+              Chưa có đánh giá nào cho phòng này.
+            </Text>
+          )}
         </View>
       </ScrollView>
 
@@ -227,12 +213,15 @@ export default function RoomDetail() {
         <View>
           <Text style={styles.bottomPriceLabel}>Giá mỗi đêm</Text>
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text style={styles.bottomPrice}>{room.price}đ</Text>
+            <Text style={styles.bottomPrice}>{Number(room.pricePerNight).toLocaleString('vi-VN')}đ</Text>
           </View>
         </View>
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => router.push('/(tabs)/booking')}
+          onPress={() => router.push({
+            pathname: '/(tabs)/booking',
+            params: { roomId: room.id }
+          })}
         >
           <LinearGradient
             colors={Gradients.button as [string, string]}

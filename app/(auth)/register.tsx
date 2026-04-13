@@ -11,13 +11,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { router, Link } from 'expo-router';
 import { AppColors, Gradients, Shadows, Radius, Spacing } from '../../constants/theme';
+import { apiClient } from '../../services/api';
 
 const { width, height } = Dimensions.get('window');
 
 const registerSchema = z.object({
-  name: z.string().min(2, 'Tên cần ít nhất 2 ký tự'),
+  name: z.string()
+    .min(2, 'Tên cần ít nhất 2 ký tự')
+    .regex(/^[a-zA-ZÀ-ỹ\s]+$/, 'Tên chỉ được chứa chữ cái và khoảng trắng'),
   email: z.string().min(1, 'Vui lòng nhập Email').email('Email không đúng định dạng'),
-  password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự'),
+  password: z.string()
+    .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+    .regex(/[A-Z]/, 'Cần ít nhất 1 chữ cái viết hoa')
+    .regex(/[a-z]/, 'Cần ít nhất 1 chữ cái viết thường')
+    .regex(/[0-9]/, 'Cần ít nhất 1 chữ số'),
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Mật khẩu xác nhận không khớp",
@@ -37,12 +44,23 @@ export default function RegisterScreen() {
 
   const onSubmit = async (data: RegisterForm) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      Alert.alert("Thành công", "Đăng ký thành công, vui lòng đăng nhập", [
-        { text: "OK", onPress: () => router.replace('/(auth)/login') }
-      ]);
+      // Gọi API đăng ký
+      const response = await apiClient.post('/auth/register', {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+      });
+
+      if (response.data.success) {
+        Alert.alert(
+          "Đăng ký thành công! 🎉", 
+          "Chúng tôi đã gửi một email xác thực. Vui lòng kiểm tra hộp thư của bạn để kích hoạt tài khoản trước khi đăng nhập.", 
+          [{ text: "Đăng nhập ngay", onPress: () => router.replace('/(auth)/login') }]
+        );
+      }
     } catch (error: any) {
-      Alert.alert("Lỗi", "Đăng ký thất bại");
+      const message = error.response?.data?.message || "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.";
+      Alert.alert("Đăng ký thất bại", message);
     }
   };
 

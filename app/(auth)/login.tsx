@@ -34,28 +34,56 @@ export default function LoginScreen() {
 
   const onSubmit = async (data: LoginForm) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Gọi API đăng nhập thực tế
+      const response = await apiClient.post('/auth/login', {
+        email: data.email,
+        password: data.password,
+      });
 
-      const mockResult = {
-        token: 'mock-jwt-token',
-        user: {
-          id: '1',
-          email: data.email,
-          role: data.email.includes('admin') ? 'ADMIN' : 'USER',
-          name: data.email.includes('admin') ? 'Admin' : 'Khách hàng',
-        } as UserData
-      };
+      const resultData = response.data;
 
-      await login(mockResult.token, mockResult.user);
+      if (resultData.success) {
+        // Lưu trữ Token và User vào Context
+        await login(resultData.data.token, {
+          id: resultData.data.user.id,
+          email: resultData.data.user.email,
+          role: resultData.data.user.role,
+          name: resultData.data.user.name,
+        });
 
-      if (mockResult.user.role === 'ADMIN') {
-        router.replace('/admin');
-      } else {
-        router.replace('/(tabs)');
+        // Điều hướng dựa trên role
+        if (resultData.data.user.role === 'ADMIN') {
+          router.replace('/admin');
+        } else {
+          router.replace('/(tabs)');
+        }
       }
-
     } catch (error: any) {
-      Alert.alert("Lỗi Đăng Nhập", "Thông tin tài khoản không chính xác!");
+      const errorData = error.response?.data;
+      
+      if (errorData?.code === 'EMAIL_NOT_VERIFIED') {
+        Alert.alert(
+          "Tài khoản chưa kích hoạt", 
+          "Vui lòng kiểm tra hộp thư email của bạn để xác thực tài khoản.",
+          [
+            { text: "Hủy", style: 'cancel' },
+            { 
+              text: "Gửi lại Email", 
+              onPress: async () => {
+                try {
+                  await apiClient.post('/auth/resend-verification', { email: data.email });
+                  Alert.alert("Thành công", "Đã gửi lại email xác thực.");
+                } catch(e) {
+                  Alert.alert("Lỗi", "Không thể gửi lại email lúc này.");
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        const message = errorData?.message || "Tài khoản hoặc mật khẩu không chính xác!";
+        Alert.alert("Đăng nhập thất bại", message);
+      }
     }
   };
 

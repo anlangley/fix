@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { AppColors, Gradients, Radius, Shadows, Spacing } from '../../constants/theme';
+import { apiClient } from '../../services/api';
 
 const TABS = [
   { id: 'all', label: 'Tất cả' },
@@ -13,52 +21,16 @@ const TABS = [
   { id: 'cancelled', label: 'Đã hủy' },
 ];
 
-const MOCK_BOOKINGS = [
-  {
-    id: '1', room: 'Phòng Deluxe Ocean View', location: 'Đà Nẵng',
-    checkIn: '15/04/2026', checkOut: '17/04/2026',
-    price: '5.500.000đ', status: 'upcoming',
-    image: require('../../assets/images/room1.jpg'),
-    bookingCode: '#LUX-2026-0411',
-  },
-  {
-    id: '2', room: 'Suite Tổng Thống', location: 'Hà Nội',
-    checkIn: '01/03/2026', checkOut: '03/03/2026',
-    price: '16.000.000đ', status: 'completed',
-    image: require('../../assets/images/room2.jpg'),
-    bookingCode: '#LUX-2026-0301',
-  },
-  {
-    id: '3', room: 'Phòng Superior Garden', location: 'Hồ Chí Minh',
-    checkIn: '10/02/2026', checkOut: '12/02/2026',
-    price: '3.600.000đ', status: 'completed',
-    image: require('../../assets/images/room3.jpg'),
-    bookingCode: '#LUX-2026-0210',
-  },
-  {
-    id: '4', room: 'Phòng Standard City View', location: 'Đà Lạt',
-    checkIn: '25/01/2026', checkOut: '26/01/2026',
-    price: '900.000đ', status: 'cancelled',
-    image: require('../../assets/images/nn1.jpg'),
-    bookingCode: '#LUX-2026-0125',
-  },
-  {
-    id: '5', room: 'Royal Penthouse Suite', location: 'Phú Quốc',
-    checkIn: '20/04/2026', checkOut: '23/04/2026',
-    price: '45.000.000đ', status: 'upcoming',
-    image: require('../../assets/images/nn2.jpg'),
-    bookingCode: '#LUX-2026-0420',
-  },
-];
-
 const getStatusConfig = (status: string) => {
   switch (status) {
-    case 'upcoming':
-      return { label: 'Sắp tới', color: AppColors.info, bg: AppColors.infoLight, icon: 'time-outline' as const };
-    case 'completed':
-      return { label: 'Hoàn thành', color: AppColors.success, bg: AppColors.successLight, icon: 'checkmark-circle-outline' as const };
-    case 'cancelled':
+    case 'PENDING':
+      return { label: 'Chờ duyệt', color: AppColors.info, bg: AppColors.infoLight, icon: 'time-outline' as const };
+    case 'CONFIRMED':
+      return { label: 'Đã xác nhận', color: AppColors.success, bg: AppColors.successLight, icon: 'checkmark-circle-outline' as const };
+    case 'CANCELLED':
       return { label: 'Đã hủy', color: AppColors.danger, bg: AppColors.dangerLight, icon: 'close-circle-outline' as const };
+    case 'COMPLETED':
+      return { label: 'Hoàn thành', color: AppColors.success, bg: AppColors.successLight, icon: 'home-outline' as const };
     default:
       return { label: status, color: AppColors.textSecondary, bg: AppColors.borderLight, icon: 'ellipsis-horizontal' as const };
   }
@@ -66,19 +38,53 @@ const getStatusConfig = (status: string) => {
 
 export default function HistoryScreen() {
   const [activeTab, setActiveTab] = useState('all');
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchMyBookings();
+  }, []);
+
+  const fetchMyBookings = async () => {
+    try {
+      if (!isRefreshing) setIsLoading(true);
+      const response = await apiClient.get('/bookings/my-bookings');
+      if (response.data?.success) {
+        setBookings(response.data.data.bookings);
+      }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchMyBookings();
+  };
 
   const filteredBookings = activeTab === 'all'
-    ? MOCK_BOOKINGS
-    : MOCK_BOOKINGS.filter((b) => b.status === activeTab);
+    ? bookings
+    : bookings.filter((b) => {
+      if (activeTab === 'upcoming') return b.status === 'PENDING' || b.status === 'CONFIRMED';
+      return b.status.toLowerCase() === activeTab.toLowerCase();
+    });
 
-  const renderBooking = ({ item }: { item: typeof MOCK_BOOKINGS[0] }) => {
+  const renderBooking = ({ item }: { item: any }) => {
     const statusConfig = getStatusConfig(item.status);
+    const roomImage = item.room?.images?.[0]?.url
+      ? { uri: item.room.images[0].url }
+      : require('../../assets/images/room1.jpg');
+
     return (
       <TouchableOpacity style={styles.bookingCard} activeOpacity={0.9}>
-        <Image source={item.image} style={styles.bookingImage} />
+        <Image source={roomImage} style={styles.bookingImage} />
         <View style={styles.bookingInfo}>
           <View style={styles.bookingHeader}>
-            <Text style={styles.bookingRoom} numberOfLines={1}>{item.room}</Text>
+            <Text style={styles.bookingRoom} numberOfLines={1}>{item.room?.name}</Text>
             <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
               <Ionicons name={statusConfig.icon} size={12} color={statusConfig.color} />
               <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
@@ -87,29 +93,39 @@ export default function HistoryScreen() {
 
           <View style={styles.bookingLocationRow}>
             <Ionicons name="location-outline" size={13} color={AppColors.textSecondary} />
-            <Text style={styles.bookingLocation}>{item.location}</Text>
+            <Text style={styles.bookingLocation}>{item.room?.location}</Text>
           </View>
 
           <View style={styles.bookingDateRow}>
             <Ionicons name="calendar-outline" size={13} color={AppColors.textSecondary} />
-            <Text style={styles.bookingDate}>{item.checkIn} → {item.checkOut}</Text>
+            <Text style={styles.bookingDate}>
+              {new Date(item.checkInDate).toLocaleDateString('vi-VN')} → {new Date(item.checkOutDate).toLocaleDateString('vi-VN')}
+            </Text>
           </View>
 
           <View style={styles.bookingFooter}>
-            <Text style={styles.bookingCode}>{item.bookingCode}</Text>
-            <Text style={styles.bookingPrice}>{item.price}</Text>
+            <Text style={styles.bookingCode}>#{item.id.slice(-8).toUpperCase()}</Text>
+            <Text style={styles.bookingPrice}>{Number(item.totalPrice).toLocaleString('vi-VN')}đ</Text>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
+  if (isLoading && !isRefreshing) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={AppColors.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient colors={Gradients.primary as [string, string]} style={styles.header}>
         <Text style={styles.headerTitle}>Lịch Sử Đặt Phòng</Text>
-        <Text style={styles.headerSubtitle}>{MOCK_BOOKINGS.length} đơn đặt phòng</Text>
+        <Text style={styles.headerSubtitle}>{bookings.length} đơn đặt phòng</Text>
       </LinearGradient>
 
       {/* Tab Filter */}
@@ -140,6 +156,9 @@ export default function HistoryScreen() {
         renderItem={renderBooking}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[AppColors.primary]} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="document-text-outline" size={56} color={AppColors.textLight} />
