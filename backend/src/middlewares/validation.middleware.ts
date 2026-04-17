@@ -27,9 +27,10 @@ export function validate(schema: AnyZodObject) {
           message: e.message,
         }));
 
+        console.log('❌ Validation Error:', errors);
         res.status(400).json({
           success: false,
-          message: 'Dữ liệu không hợp lệ',
+          message: errors[0].message || 'Dữ liệu không hợp lệ',
           errors,
         });
         return;

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Image, TextInput, Alert, ActivityIndicator,
+  Image, TextInput, Alert, ActivityIndicator, Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -16,9 +17,16 @@ export default function BookingForm() {
   const [room, setRoom] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isWeb = Platform.OS === 'web';
   
-  const [checkIn, setCheckIn] = useState('15/04/2026');
-  const [checkOut, setCheckOut] = useState('17/04/2026');
+  const [checkIn, setCheckIn] = useState(new Date());
+  const [checkOut, setCheckOut] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d;
+  });
+  const [showInPicker, setShowInPicker] = useState(false);
+  const [showOutPicker, setShowOutPicker] = useState(false);
   const [guests, setGuests] = useState(2);
   const [rooms, setRooms] = useState(1);
   const [specialRequest, setSpecialRequest] = useState('');
@@ -48,12 +56,32 @@ export default function BookingForm() {
     try {
       setIsSubmitting(true);
       
-      // Chuyển đổi ngày sang định dạng ISO cho Backend (phần này có thể cần date picker thực tế hơn)
-      // Tạm thời giả định định dạng dd/mm/yyyy -> yyyy-mm-dd
-      const [inD, inM, inY] = checkIn.split('/');
-      const [outD, outM, outY] = checkOut.split('/');
-      const isoCheckIn = `${inY}-${inM}-${inD}`;
-      const isoCheckOut = `${outY}-${outM}-${outD}`;
+      // Chuyển đổi ngày sang định dạng ISO cho Backend (YYYY-MM-DD)
+      const toISO = (date: Date) => {
+        return date.toISOString().split('T')[0];
+      };
+
+      const isoCheckIn = toISO(checkIn);
+      const isoCheckOut = toISO(checkOut);
+
+      // Kiểm tra dữ liệu đầu vào trước khi gửi
+      if (!roomId) {
+        Alert.alert('Lỗi', 'Thiếu mã phòng. Vui lòng quay lại trang chi tiết và thử lại.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!isoCheckIn || !isoCheckOut) {
+        Alert.alert('Lỗi', 'Định dạng ngày tháng không hợp lệ (dd/mm/yyyy).');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (nights <= 0) {
+        Alert.alert('Lỗi', 'Ngày trả phòng phải sau ngày nhận phòng.');
+        setIsSubmitting(false);
+        return;
+      }
 
       const bookingData = {
         roomId,
@@ -62,29 +90,87 @@ export default function BookingForm() {
         guestsCount: guests,
         roomsCount: rooms,
         specialRequest,
-        paymentMethod: 'MOMO', // Mặc định MoMo
+        paymentMethod: 'MOMO',
+        // Thêm thông tin phòng để hiển thị bên trang payment mà không cần fetch lại
+        roomName: room?.name,
+        nightCount: nights,
+        totalPrice: total,
       };
 
-      const response = await apiClient.post('/bookings', bookingData);
-      
-      if (response.data?.success) {
-        const bookingId = response.data.data.booking.id;
-        router.push({
-          pathname: '/(tabs)/booking/payment',
-          params: { bookingId }
-        });
-      }
+      console.log('[Booking Data Prepared]:', JSON.stringify(bookingData, null, 2));
+
+      // Không gọi API ở đây, chuyển sang trang payment với toàn bộ data
+      router.push({
+        pathname: '/(tabs)/booking/payment',
+        params: { bookingData: JSON.stringify(bookingData) }
+      });
     } catch (error: any) {
-      console.error('Booking failed:', error);
-      const errMsg = error.response?.data?.message || 'Có lỗi xảy ra khi đặt phòng.';
-      Alert.alert('Đặt phòng thất bại', errMsg);
+      console.error('Booking step failed:', error);
+      Alert.alert('Lỗi', 'Có lỗi xảy ra khi chuẩn bị thông tin đặt phòng.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Tính toán số đêm và tổng tiền
+  const calculateNights = (start: Date, end: Date) => {
+    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    const diffTime = e.getTime() - s.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const formatDateDisplay = (date: Date) => {
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+  };
+
+  // Hàm chuẩn hóa ngày về 00:00:00 để so sánh chính xác
+  const normalizeDate = (date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const onInDateChange = (event: any, selectedDate?: Date) => {
+    // Với Android, Picker tự đóng sau khi chọn hoặc cancel
+    if (Platform.OS === 'android') {
+      setShowInPicker(false);
+      if (event.type === 'set' && selectedDate) {
+        const normalized = normalizeDate(selectedDate);
+        setCheckIn(normalized);
+        if (normalized >= normalizeDate(checkOut)) {
+          const newOut = new Date(normalized);
+          newOut.setDate(newOut.getDate() + 1);
+          setCheckOut(newOut);
+        }
+      }
+    } else {
+      // Với iOS, cập nhật giá trị liên tục khi quay spinner
+      if (selectedDate) {
+        setCheckIn(selectedDate);
+      }
+    }
+  };
+
+  const onOutDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowOutPicker(false);
+      if (event.type === 'set' && selectedDate) {
+        setCheckOut(normalizeDate(selectedDate));
+      }
+    } else {
+      if (selectedDate) {
+        setCheckOut(selectedDate);
+      }
+    }
+  };
+
+  const nights = calculateNights(normalizeDate(checkIn), normalizeDate(checkOut));
   const roomPrice = room ? Number(room.pricePerNight) : 0;
-  const nights = 2; // Tạm thời fix cứng số đêm hoặc cần tính toán từ ngày
   const subtotal = roomPrice * nights * rooms;
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
@@ -136,16 +222,55 @@ export default function BookingForm() {
           <View style={styles.dateRow}>
             <View style={styles.dateCard}>
               <Text style={styles.dateLabel}>Nhận phòng</Text>
-              <View style={styles.dateInputContainer}>
+              <TouchableOpacity 
+                style={styles.dateInputContainer}
+                onPress={() => {
+                  console.log('[DEBUG] Press Nhận phòng, follows logic for:', Platform.OS);
+                  if (isWeb) {
+                    // Trên Web dùng input date chuẩn nếu có thể, hoặc thông báo
+                    if (typeof window !== 'undefined') {
+                      window.alert('Tính năng chọn lịch này hoạt động tốt nhất trên app điện thoại. Trên web anh hãy nhập theo định dạng YYYY-MM-DD nhé!');
+                    }
+                  } else {
+                    setShowInPicker(true);
+                  }
+                }}
+              >
                 <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
-                <TextInput
-                  style={styles.dateInput}
-                  value={checkIn}
-                  onChangeText={setCheckIn}
-                  placeholder="dd/mm/yyyy"
-                />
-              </View>
+                {isWeb ? (
+                   <TextInput
+                    style={styles.dateInputWeb}
+                    value={toISO(checkIn)}
+                    onChangeText={(val) => {
+                      const d = new Date(val);
+                      if (!isNaN(d.getTime())) setCheckIn(normalizeDate(d));
+                    }}
+                    placeholder="YYYY-MM-DD"
+                  />
+                ) : (
+                  <Text style={styles.dateInputText}>{formatDateDisplay(checkIn)}</Text>
+                )}
+              </TouchableOpacity>
               <Text style={styles.dateHint}>14:00</Text>
+              {showInPicker && Platform.OS !== 'web' && (
+                <View>
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity 
+                      style={{ alignSelf: 'flex-end', padding: 5 }} 
+                      onPress={() => setShowInPicker(false)}
+                    >
+                      <Text style={{ color: AppColors.primary, fontWeight: 'bold' }}>Xong</Text>
+                    </TouchableOpacity>
+                  )}
+                  <DateTimePicker
+                    value={checkIn}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                    minimumDate={normalizeDate(new Date())}
+                    onChange={onInDateChange}
+                  />
+                </View>
+              )}
             </View>
             <View style={styles.dateArrow}>
               <Ionicons name="arrow-forward" size={20} color={AppColors.textLight} />
@@ -153,16 +278,54 @@ export default function BookingForm() {
             </View>
             <View style={styles.dateCard}>
               <Text style={styles.dateLabel}>Trả phòng</Text>
-              <View style={styles.dateInputContainer}>
+              <TouchableOpacity 
+                style={styles.dateInputContainer}
+                onPress={() => {
+                  console.log('[DEBUG] Press Trả phòng');
+                  if (isWeb) {
+                    if (typeof window !== 'undefined') {
+                      window.alert('Trên web anh hãy nhập theo định dạng YYYY-MM-DD!');
+                    }
+                  } else {
+                    setShowOutPicker(true);
+                  }
+                }}
+              >
                 <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
-                <TextInput
-                  style={styles.dateInput}
-                  value={checkOut}
-                  onChangeText={setCheckOut}
-                  placeholder="dd/mm/yyyy"
-                />
-              </View>
+                {isWeb ? (
+                   <TextInput
+                    style={styles.dateInputWeb}
+                    value={toISO(checkOut)}
+                    onChangeText={(val) => {
+                      const d = new Date(val);
+                      if (!isNaN(d.getTime())) setCheckOut(normalizeDate(d));
+                    }}
+                    placeholder="YYYY-MM-DD"
+                  />
+                ) : (
+                  <Text style={styles.dateInputText}>{formatDateDisplay(checkOut)}</Text>
+                )}
+              </TouchableOpacity>
               <Text style={styles.dateHint}>12:00</Text>
+              {showOutPicker && Platform.OS !== 'web' && (
+                <View>
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity 
+                      style={{ alignSelf: 'flex-end', padding: 5 }} 
+                      onPress={() => setShowOutPicker(false)}
+                    >
+                      <Text style={{ color: AppColors.primary, fontWeight: 'bold' }}>Xong</Text>
+                    </TouchableOpacity>
+                  )}
+                  <DateTimePicker
+                    value={checkOut}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                    minimumDate={new Date(normalizeDate(checkIn).getTime() + 86400000)}
+                    onChange={onOutDateChange}
+                  />
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -326,8 +489,10 @@ const styles = StyleSheet.create({
   dateInputContainer: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderBottomWidth: 1, borderBottomColor: AppColors.borderLight, paddingBottom: 6,
+    minHeight: 30,
   },
-  dateInput: { flex: 1, fontSize: 15, fontWeight: '600', color: AppColors.textPrimary },
+  dateInputText: { fontSize: 15, fontWeight: '600', color: AppColors.textPrimary },
+  dateInputWeb: { fontSize: 14, fontWeight: '600', color: AppColors.textPrimary, flex: 1, padding: 0 },
   dateHint: { fontSize: 11, color: AppColors.textLight, marginTop: 4 },
   dateArrow: { alignItems: 'center', gap: 2 },
   nightCount: { fontSize: 10, color: AppColors.textLight, fontWeight: '600' },

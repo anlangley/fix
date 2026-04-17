@@ -1,60 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Image, Dimensions, TextInput,
+  Image, Dimensions, TextInput, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { AppColors, Shadows, Radius, Spacing, Typography, Gradients } from '../../../constants/theme';
+import { apiClient } from '../../../services/api';
 
 const { width } = Dimensions.get('window');
 
 const FILTERS = [
   { id: 'all', label: 'Tất cả', icon: 'grid-outline' as const },
-  { id: 'single', label: 'Phòng Đơn', icon: 'person-outline' as const },
-  { id: 'double', label: 'Phòng Đôi', icon: 'people-outline' as const },
-  { id: 'suite', label: 'Suite', icon: 'star-outline' as const },
-  { id: 'vip', label: 'VIP', icon: 'diamond-outline' as const },
-];
-
-const ALL_ROOMS = [
-  {
-    id: '1', name: 'Phòng Deluxe Ocean View', type: 'double',
-    price: '2.500.000', image: require('../../../assets/images/room1.jpg'),
-    rating: 4.8, reviews: 124, location: 'Đà Nẵng', badge: 'Hot Deal',
-    amenities: ['wifi', 'tv', 'snow-outline'],
-  },
-  {
-    id: '2', name: 'Suite Tổng Thống', type: 'suite',
-    price: '8.000.000', image: require('../../../assets/images/room2.jpg'),
-    rating: 4.9, reviews: 89, location: 'Hà Nội', badge: 'Premium',
-    amenities: ['wifi', 'tv', 'wine', 'snow-outline'],
-  },
-  {
-    id: '3', name: 'Phòng Superior Garden', type: 'double',
-    price: '1.800.000', image: require('../../../assets/images/room3.jpg'),
-    rating: 4.6, reviews: 256, location: 'Hồ Chí Minh', badge: null,
-    amenities: ['wifi', 'tv'],
-  },
-  {
-    id: '4', name: 'Phòng Standard City View', type: 'single',
-    price: '900.000', image: require('../../../assets/images/nn1.jpg'),
-    rating: 4.3, reviews: 412, location: 'Đà Lạt', badge: 'Giá tốt',
-    amenities: ['wifi'],
-  },
-  {
-    id: '5', name: 'Royal Penthouse Suite', type: 'vip',
-    price: '15.000.000', image: require('../../../assets/images/nn2.jpg'),
-    rating: 5.0, reviews: 32, location: 'Phú Quốc', badge: 'Exclusive',
-    amenities: ['wifi', 'tv', 'wine', 'snow-outline', 'fitness-outline'],
-  },
-  {
-    id: '6', name: 'Phòng Family Deluxe', type: 'double',
-    price: '3.200.000', image: require('../../../assets/images/nn3.jpg'),
-    rating: 4.7, reviews: 178, location: 'Nha Trang', badge: null,
-    amenities: ['wifi', 'tv', 'snow-outline'],
-  },
+  { id: 'SINGLE', label: 'Phòng Đơn', icon: 'person-outline' as const },
+  { id: 'DOUBLE', label: 'Phòng Đôi', icon: 'people-outline' as const },
+  { id: 'SUITE', label: 'Suite', icon: 'star-outline' as const },
+  { id: 'VIP', label: 'VIP', icon: 'diamond-outline' as const },
 ];
 
 const StarRating = ({ rating, size = 12 }: { rating: number; size?: number }) => (
@@ -74,12 +36,34 @@ export default function RoomList() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredRooms = ALL_ROOMS.filter((room) => {
-    const matchFilter = activeFilter === 'all' || room.type === activeFilter;
+  useEffect(() => {
+    fetchRooms();
+  }, [activeFilter]);
+
+  const fetchRooms = async () => {
+    try {
+      setIsLoading(true);
+      const params: any = {};
+      if (activeFilter !== 'all') params.type = activeFilter.toUpperCase();
+      
+      const response = await apiClient.get('/rooms', { params });
+      if (response.data?.success) {
+        setRooms(response.data.data.rooms);
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredRooms = rooms.filter((room) => {
     const matchSearch = room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       room.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchFilter && matchSearch;
+    return matchSearch;
   });
 
   const getBadgeColor = (badge: string) => {
@@ -92,59 +76,64 @@ export default function RoomList() {
     }
   };
 
-  const renderRoom = ({ item }: { item: typeof ALL_ROOMS[0] }) => (
-    <TouchableOpacity
-      style={styles.roomCard}
-      activeOpacity={0.9}
-      onPress={() => router.push(`/(tabs)/rooms/${item.id}`)}
-    >
-      <View style={styles.roomImageContainer}>
-        <Image source={item.image} style={styles.roomImage} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.4)']}
-          style={styles.roomImageOverlay}
-        />
-        {item.badge && (
-          <View style={[styles.roomBadge, { backgroundColor: getBadgeColor(item.badge) }]}>
-            <Text style={styles.roomBadgeText}>{item.badge}</Text>
-          </View>
-        )}
-        <TouchableOpacity style={styles.heartBtn}>
-          <Ionicons name="heart-outline" size={20} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.priceOverlay}>
-          <Text style={styles.priceOverlayText}>{item.price}đ</Text>
-          <Text style={styles.pricePerNight}>/đêm</Text>
-        </View>
-      </View>
-      <View style={styles.roomInfo}>
-        <Text style={styles.roomName} numberOfLines={1}>{item.name}</Text>
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={14} color={AppColors.textSecondary} />
-          <Text style={styles.locationText}>{item.location}</Text>
-        </View>
-        <View style={styles.bottomRow}>
-          <View style={styles.ratingRow}>
-            <StarRating rating={item.rating} />
-            <Text style={styles.ratingText}>{item.rating}</Text>
-            <Text style={styles.reviewsText}>({item.reviews} đánh giá)</Text>
-          </View>
-          <View style={styles.amenitiesRow}>
-            {item.amenities.slice(0, 3).map((icon, idx) => (
-              <Ionicons key={idx} name={icon as any} size={14} color={AppColors.textLight} />
-            ))}
+  const renderRoom = ({ item }: { item: any }) => {
+    const primaryImage = item.images?.find((img: any) => img.isPrimary)?.url || item.images?.[0]?.url || 'https://via.placeholder.com/300x200';
+    const amenities = item.amenities ? JSON.parse(item.amenities) : [];
+
+    return (
+      <TouchableOpacity
+        style={styles.roomCard}
+        activeOpacity={0.9}
+        onPress={() => router.push(`/(tabs)/rooms/${item.id}`)}
+      >
+        <View style={styles.roomImageContainer}>
+          <Image source={{ uri: primaryImage }} style={styles.roomImage} />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.4)']}
+            style={styles.roomImageOverlay}
+          />
+          {item.pricePerNight < 2000000 && (
+            <View style={[styles.roomBadge, { backgroundColor: getBadgeColor('Hot Deal') }]}>
+              <Text style={styles.roomBadgeText}>Hot Deal</Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.heartBtn}>
+            <Ionicons name="heart-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.priceOverlay}>
+            <Text style={styles.priceOverlayText}>{Number(item.pricePerNight).toLocaleString('vi-VN')}đ</Text>
+            <Text style={styles.pricePerNight}>/đêm</Text>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.roomInfo}>
+          <Text style={styles.roomName} numberOfLines={1}>{item.name}</Text>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={14} color={AppColors.textSecondary} />
+            <Text style={styles.locationText}>{item.location}</Text>
+          </View>
+          <View style={styles.bottomRow}>
+            <View style={styles.ratingRow}>
+              <StarRating rating={item.avgRating || 0} />
+              <Text style={styles.ratingText}>{item.avgRating || 0}</Text>
+              <Text style={styles.reviewsText}>({item.reviewCount || 0} đánh giá)</Text>
+            </View>
+            <View style={styles.amenitiesRow}>
+              {Array.isArray(amenities) && amenities.slice(0, 3).map((amenity: any, idx: number) => (
+                <Ionicons key={idx} name={amenity.icon || 'help-outline'} size={14} color={AppColors.textLight} />
+              ))}
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient colors={Gradients.primary as [string, string]} style={styles.header}>
         <Text style={styles.headerTitle}>Tìm Phòng</Text>
-        <Text style={styles.headerSubtitle}>{ALL_ROOMS.length} phòng đang chờ bạn</Text>
+        <Text style={styles.headerSubtitle}>{filteredRooms.length} phòng đang chờ bạn</Text>
         {/* Search */}
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color={AppColors.textSecondary} />

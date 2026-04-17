@@ -1,39 +1,60 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../constants/theme';
+import { apiClient } from '../../services/api';
 
 const { width } = Dimensions.get('window');
-
-const STATS = [
-  { icon: 'bed-outline' as const, label: 'Tổng phòng', value: '48', color: '#3B82F6', bg: '#DBEAFE' },
-  { icon: 'calendar-outline' as const, label: 'Booking hôm nay', value: '12', color: '#10B981', bg: '#D1FAE5' },
-  { icon: 'cash-outline' as const, label: 'Doanh thu tháng', value: '245M', color: '#F59E0B', bg: '#FEF3C7' },
-  { icon: 'people-outline' as const, label: 'Người dùng', value: '1.2K', color: '#8B5CF6', bg: '#EDE9FE' },
-];
-
-const QUICK_ACTIONS = [
-  { icon: 'add-circle-outline' as const, label: 'Thêm Phòng', route: '/admin/rooms', color: '#3B82F6' },
-  { icon: 'list-outline' as const, label: 'Quản lý Booking', route: '/admin/bookings', color: '#10B981' },
-  { icon: 'people-outline' as const, label: 'Quản lý Users', route: '/admin/users', color: '#8B5CF6' },
-  { icon: 'stats-chart-outline' as const, label: 'Báo cáo', route: '/admin/rooms', color: '#F59E0B' },
-];
-
-const RECENT_BOOKINGS = [
-  { id: '1', guest: 'Nguyễn Văn A', room: 'Deluxe Ocean View', date: '11/04/2026', status: 'confirmed', amount: '5.5M' },
-  { id: '2', guest: 'Trần Thị B', room: 'Suite Tổng Thống', date: '11/04/2026', status: 'pending', amount: '16M' },
-  { id: '3', guest: 'Lê Minh C', room: 'Standard City View', date: '10/04/2026', status: 'confirmed', amount: '1.8M' },
-  { id: '4', guest: 'Phạm Đức D', room: 'Family Deluxe', date: '10/04/2026', status: 'cancelled', amount: '3.2M' },
-];
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [stats, setStats] = useState({
+    roomsCount: 0,
+    bookingsToday: 0,
+    monthlyRevenue: 0,
+    usersCount: 0,
+  });
+  const [recentBookings, setRecentBookings] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      if (!isRefreshing) setIsLoading(true);
+      
+      // Lấy thống kê
+      const statsRes = await apiClient.get('/admin/stats');
+      if (statsRes.data?.success) {
+        setStats(statsRes.data.data);
+      }
+
+      // Lấy booking gần đây
+      const bookingsRes = await apiClient.get('/bookings?limit=5');
+      if (bookingsRes.data?.success) {
+        setRecentBookings(bookingsRes.data.data.bookings);
+      }
+    } catch (error) {
+      console.error('Fetch dashboard data failed:', error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchDashboardData();
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -42,99 +63,134 @@ export default function AdminDashboard() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'confirmed': return { color: AppColors.success, bg: AppColors.successLight, label: 'Xác nhận' };
-      case 'pending': return { color: AppColors.warning, bg: AppColors.warningLight, label: 'Chờ duyệt' };
-      case 'cancelled': return { color: AppColors.danger, bg: AppColors.dangerLight, label: 'Đã hủy' };
+      case 'CONFIRMED': return { color: AppColors.success, bg: AppColors.successLight, label: 'Xác nhận' };
+      case 'PENDING': return { color: AppColors.warning, bg: AppColors.warningLight, label: 'Chờ duyệt' };
+      case 'CANCELLED': return { color: AppColors.danger, bg: AppColors.dangerLight, label: 'Đã hủy' };
       default: return { color: AppColors.textSecondary, bg: AppColors.borderLight, label: status };
     }
   };
+  
+  const STAT_CARDS = [
+    { icon: 'bed-outline' as const, label: 'Tổng phòng', value: stats.roomsCount.toString(), color: '#3B82F6', bg: '#DBEAFE' },
+    { icon: 'calendar-outline' as const, label: 'Booking hôm nay', value: stats.bookingsToday.toString(), color: '#10B981', bg: '#D1FAE5' },
+    { icon: 'cash-outline' as const, label: 'Doanh thu tháng', value: `${(stats.monthlyRevenue / 1000000).toFixed(1)}M`, color: '#F59E0B', bg: '#FEF3C7' },
+    { icon: 'people-outline' as const, label: 'Người dùng', value: stats.usersCount.toString(), color: '#8B5CF6', bg: '#EDE9FE' },
+  ];
+
+  const QUICK_ACTIONS = [
+    { icon: 'bed-outline' as const, label: 'Quản lý Phòng', route: '/admin/rooms', color: '#3B82F6' },
+    { icon: 'list-outline' as const, label: 'Quản lý Booking', route: '/admin/bookings', color: '#10B981' },
+    { icon: 'people-outline' as const, label: 'Quản lý Users', route: '/admin/users', color: '#8B5CF6' },
+  ];
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <LinearGradient colors={['#1B1F3B', '#2D325A'] as [string, string]} style={styles.header}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.headerGreeting}>Xin chào, Admin 👋</Text>
-            <Text style={styles.headerEmail}>{user?.email}</Text>
-          </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        {STATS.map((stat, idx) => (
-          <View key={idx} style={styles.statCard}>
-            <View style={[styles.statIconContainer, { backgroundColor: stat.bg }]}>
-              <Ionicons name={stat.icon} size={24} color={stat.color} />
+      <ScrollView 
+        style={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[AppColors.primary]} />
+        }
+      >
+        {/* Header */}
+        <LinearGradient colors={['#1B1F3B', '#2D325A'] as [string, string]} style={styles.header}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.headerGreeting}>Xin chào, Admin 👋</Text>
+              <Text style={styles.headerEmail}>{user?.email}</Text>
             </View>
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Quick Actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Thao tác nhanh</Text>
-        <View style={styles.actionsGrid}>
-          {QUICK_ACTIONS.map((action, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.actionCard}
-              onPress={() => router.push(action.route as any)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
-                <Ionicons name={action.icon} size={26} color={action.color} />
-              </View>
-              <Text style={styles.actionLabel}>{action.label}</Text>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={22} color="#fff" />
             </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+          </View>
+        </LinearGradient>
 
-      {/* Recent Bookings */}
-      <View style={[styles.section, { marginBottom: Spacing.huge }]}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Booking gần đây</Text>
-          <TouchableOpacity onPress={() => router.push('/admin/bookings')}>
-            <Text style={styles.seeAll}>Xem tất cả →</Text>
-          </TouchableOpacity>
-        </View>
+        {isLoading && !isRefreshing ? (
+          <View style={{ padding: 50 }}>
+            <ActivityIndicator size="large" color={AppColors.primary} />
+          </View>
+        ) : (
+          <>
+            {/* Stats Grid */}
+            <View style={styles.statsGrid}>
+              {STAT_CARDS.map((stat, idx) => (
+                <View key={idx} style={styles.statCard}>
+                  <View style={[styles.statIconContainer, { backgroundColor: stat.bg }]}>
+                    <Ionicons name={stat.icon} size={24} color={stat.color} />
+                  </View>
+                  <Text style={styles.statValue}>{stat.value}</Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
 
-        {RECENT_BOOKINGS.map((booking) => {
-          const statusStyle = getStatusStyle(booking.status);
-          return (
-            <View key={booking.id} style={styles.bookingCard}>
-              <View style={styles.bookingLeft}>
-                <View style={styles.bookingAvatar}>
-                  <Text style={styles.bookingAvatarText}>
-                    {booking.guest[0]}
-                  </Text>
-                </View>
-                <View style={{flex: 1}}>
-                  <Text style={styles.bookingGuest}>{booking.guest}</Text>
-                  <Text style={styles.bookingRoom}>{booking.room}</Text>
-                  <Text style={styles.bookingDate}>{booking.date}</Text>
-                </View>
-              </View>
-              <View style={styles.bookingRight}>
-                <Text style={styles.bookingAmount}>{booking.amount}đ</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusText, { color: statusStyle.color }]}>
-                    {statusStyle.label}
-                  </Text>
-                </View>
+            {/* Quick Actions */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Thao tác nhanh</Text>
+              <View style={styles.actionsGrid}>
+                {QUICK_ACTIONS.map((action, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.actionCard}
+                    onPress={() => router.push(action.route as any)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
+                      <Ionicons name={action.icon} size={26} color={action.color} />
+                    </View>
+                    <Text style={styles.actionLabel}>{action.label}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
-          );
-        })}
-      </View>
-    </ScrollView>
+
+            {/* Recent Bookings */}
+            <View style={[styles.section, { marginBottom: Spacing.huge }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Booking gần đây</Text>
+                <TouchableOpacity onPress={() => router.push('/admin/bookings')}>
+                  <Text style={styles.seeAll}>Xem tất cả →</Text>
+                </TouchableOpacity>
+              </View>
+
+              {recentBookings.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>Chưa có booking nào gần đây</Text>
+                </View>
+              ) : (
+                recentBookings.map((booking) => {
+                  const statusStyle = getStatusStyle(booking.status);
+                  return (
+                    <View key={booking.id} style={styles.bookingCard}>
+                      <View style={styles.bookingLeft}>
+                        <View style={styles.bookingAvatar}>
+                          <Text style={styles.bookingAvatarText}>
+                            {booking.user?.name?.[0] || 'U'}
+                          </Text>
+                        </View>
+                        <View style={{flex: 1}}>
+                          <Text style={styles.bookingGuest}>{booking.user?.name || 'Khách'}</Text>
+                          <Text style={styles.bookingRoom}>{booking.room?.name || 'Phòng'}</Text>
+                          <Text style={styles.bookingDate}>
+                            {new Date(booking.checkInDate).toLocaleDateString('vi-VN')}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.bookingRight}>
+                        <Text style={styles.bookingAmount}>{Number(booking.totalPrice).toLocaleString('vi-VN')}đ</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                          <Text style={[styles.statusText, { color: statusStyle.color }]}>
+                            {statusStyle.label}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
   );
 }
 
@@ -211,4 +267,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.xs,
   },
   statusText: { fontSize: 10, fontWeight: '600' },
+  emptyState: { 
+    padding: Spacing.xl, alignItems: 'center', 
+    backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: Radius.md,
+    borderWidth: 1, borderColor: AppColors.borderLight, borderStyle: 'dashed',
+  },
+  emptyText: { fontSize: 14, color: AppColors.textSecondary },
 });

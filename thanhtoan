@@ -1,0 +1,87 @@
+# Phân Tích Nghiệp Vụ Thanh Toán & Đặt Phòng
+
+Dựa trên yêu cầu của bạn, hệ thống cần thiết kế một luồng (workflow) đảm bảo: **không tạo dữ liệu rác nếu người dùng huỷ ngang** (rời khỏi trang thanh toán) và **quy trình duyệt thanh toán chặt chẽ từ Admin**.
+
+Dưới đây là chi tiết phân tích và giải pháp kiến trúc hệ thống áp dụng cho Frontend và Backend:
+
+## 1. Phân Tích Các Trường Hợp
+
+### Trường Hợp 1: Người dùng "Back" lại hoặc bỏ ngang, không thực hiện thanh toán
+- **Yêu cầu:** Không được lưu lại thông tin đặt phòng vào hệ thống.
+- **Giải pháp:**
+  - Ở trang "Điền thông tin đặt phòng", khi người dùng nhấn "Tiếp tục" hoặc "Đặt phòng", frontend **KHÔNG GỌI API lưu Booking** ngay lập tức vào cơ sở dữ liệu.
+  - Thay vào đó, toàn bộ dữ liệu (Thông tin phòng, ngày In/Out, số lượng khách, thông tin cá nhân) sẽ được lưu tạm tại **Frontend State** (Redux, Context API, hoặc LocalStorage/SessionStorage) và chuyển hướng (`navigate`) người dùng sang **Trang Thanh Toán**.
+  - **Trang Thanh Toán** sẽ đọc dữ liệu từ State này ra để hiển thị thông tin tổng tiền và phương thức thanh toán (ví dụ: in QR Code chuyển khoản hoặc nhập thẻ).
+  - Nếu người dùng nhấn nút "Back" trên trình duyệt, hoặc nhấn "Huỷ/Quay về trang trước", dữ liệu Booking vẫn chỉ nằm ở máy người dùng (Client-Side) và chưa từng được gửi lên Server. Do đó Server **sạch sẽ, không có dòng rác nào**.
+
+### Trường Hợp 2: Người dùng thanh toán và ấn "Xác nhận"
+- **Yêu cầu:** Lưu phòng vào lịch sử đặt phòng. Admin cập nhật trạng thái thanh toán, sau đó lịch sử cập nhật theo.
+- **Giải pháp:**
+  - Khi người dùng ấn nút **"Xác nhận đã thanh toán"** (hoặc thanh toán Momo thành công), Frontend sẽ gom toàn bộ dữ liệu đã được lưu tạm ở State + Dữ liệu thanh toán để gọi API `POST /api/bookings` lên Backend.
+  - Lúc này, Backend mới thực hiện tính toán, tạo bản ghi `Booking`, đồng thời khởi tạo `Payment` tương ứng.
+  - Trạng thái mặc định khi vừa tạo trong DB sẽ là:
+    - **Booking.status = `PENDING`** (Chờ duyệt).
+    - **Booking.paymentStatus = `UNPAID`** (hoặc `PENDING_VERIFICATION`).
+  - Sau khi Booking được tạo thành công, frontend điều hướng người dùng sang trang **Lịch sử đặt phòng**. Tại đây, Booking mới này sẽ hiển thị với trạng thái "Đang chờ admin xác nhận".
+
+## 2. Luồng Nghiệp Vụ Của Admin
+- Admin truy cập vào Trang Quản Trị (Dashboard).
+- Lọc danh sách các Booking có trạng thái `PENDING` và `paymentStatus` = `UNPAID / PENDING_VERIFICATION`.
+- Admin kết hợp kiểm tra app ngân hàng/momo/hệ thống xem tiền đã về tài khoản thật hay chưa.
+- **Trường hợp tiền đã vào:** Admin bấm nút **"Xác nhận thanh toán"**.
+  - Backend thực hiện cập nhật DB: `Booking.paymentStatus = 'PAID'` và `Booking.status = 'CONFIRMED'`. (Có thể chạy ngầm một luồng gửi Email/SMS tự động báo đặt phòng thaành công).
+- **Trường hợp không nhận được tiền hoặc khách không thanh toán:** Admin có thể bấm nút **"Từ chối" / "Hủy"**.
+  - Backend cập nhật `Booking.status = 'CANCELLED'`.
+- Người dùng khi vào lại trang "Lịch sử đặt phòng" (hoặc load lại trang) sẽ thấy trạng thái động của Booking đã được cập nhật thành **"Đã xác nhận"** (CONFIRMED) hoặc **"Bị huỷ"** (CANCELLED).
+
+## 3. Kiến Trúc Sơ Đồ Hệ Thống (Workflow)
+
+```mermaid
+sequenceDiagram
+    participant U as User (Frontend)
+    participant B as Backend
+    participant DB as Database
+    participant A as Admin
+
+    U->>U: 1. Điền thông tin đặt phòng 
+    U->>U: 2. Nhấn "Thanh toán". Lưu data vào Redux/Context
+    U->>U: 3. Chuyển sang Trang Thanh Toán
+    alt Trường hợp 1: Huỷ
+        U->>U: 4. Nhấn "Back". Quay lại bước 1. (KHÔNG gọi API)
+    else Trường hợp 2: Xác nhận
+        U->>U: 4. Chọn thanh toán & nhấn "Xác nhận"
+        U->>B: 5. Gửi toàn bộ Data Booking
+        B->>DB: 6. INSERT Booking (Status = PENDING, PayStatus = UNPAID)
+        B-->>U: 7. Trả về Booking Id
+        U->>U: 8. Chuyển hướng sang "Lịch sử đặt phòng"
+    end
+
+    A->>B: 9. Admin xem danh sách chờ xác nhận
+    B-->>A: (Hiển thị Booking mới, Status=PENDING)
+    A->>B: 10. Admin bấm "Xác nhận nhận tiền"
+    B->>DB: 11. UPDATE Booking (Status = CONFIRMED, PayStatus = PAID)
+    DB-->>B: .
+    B-->>A: Cập nhật thành công
+    U->>B: 12. User vào xem Lịch sử đặt phòng
+    B-->>U: Hiển thị trạng thái "CONFIRMED", "PAID"
+```
+
+## 4. Đánh Giá Rủi Ro và Cách Khắc Phục (Security Review)
+
+> [!WARNING]
+> Có một rủi ro lớn khi gom dữ liệu lên Frontend: Người dùng có thể cố ý sửa đổi `pricePerNight` hoặc `subtotal` bằng DevTools trước khi gửi API `POST /api/bookings` để "hack" trả tiền rẻ hơn.
+
+* **Cách khắc phục:**
+  * Endpoint `POST /api/bookings` **KHÔNG** được tin tưởng hoàn toàn dữ liệu tính toán từ Frontend.
+  * Backend chỉ nhận: `roomId`, `checkInDate`, `checkOutDate`, `guestsCount`, và các thông tin cơ bản.
+  * Sau đó Backend tự truy vấn CSDL (bảng `Rooms`) lấy `pricePerNight` chính xác ra tính toán lại toàn bộ `totalPrice` và `taxAmount`.
+  * Nếu Frontend gửi sang số tiền lệch với Backend tự tính, Backend dùng số tiền tự tính để lưu! (Hoặc trả về lỗi 400 Bad Request / 409 Conflict). 
+
+## 5. Kế Hoạch Triển Khai (Dự kiến)
+
+Bạn có đồng ý với kịch bản này không? Nếu bạn đồng ý, quá trình triển khai sẽ bao gồm các phần chính sau:
+1. **Frontend:** Cập nhật file Đặt phòng (chỉ lưu State), cập nhật trang Thanh toán (thực sự gọi API POST /api/bookings).
+2. **Backend Controller:** Cập nhật lại `bookingController.ts` để nhận logic phía backend. Xoá bỏ các đoạn code lưu booking nháp nếu có.
+3. **Admin:** Thêm hoặc cấu hình enpoint API để Admin duyệt và đổi trạng thái (paymentStatus = PAID, status = CONFIRMED).
+
+Vui lòng xác nhận / Approve để tôi triển khai theo mô hình này.

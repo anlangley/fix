@@ -101,16 +101,18 @@ export async function sendVerificationEmail(
 export async function sendPasswordResetEmail(
   to: string,
   name: string,
-  resetUrl: string
+  token: string
 ): Promise<void> {
   const html = baseTemplate(`
     <p class="title">Đặt lại mật khẩu 🔐</p>
     <p class="text">Xin chào <span class="highlight">${name}</span>,</p>
-    <p class="text">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn vào nút bên dưới để tiến hành:</p>
-    <div style="text-align: center;">
-      <a href="${resetUrl}" class="btn">🔓 Đặt Lại Mật Khẩu</a>
+    <p class="text">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Vui lòng sử dụng mã xác thực bên dưới để hoàn tất quá trình:</p>
+    <div class="code-box">
+      <div style="font-size: 13px; color: #6B7280; margin-bottom: 8px;">MÃ XÁC THỰC</div>
+      <div class="code">${token}</div>
     </div>
-    <p class="warning">⏰ Link sẽ hết hạn sau <strong>1 giờ</strong>.</p>
+    <p class="text">Nhập mã này vào ứng dụng để đặt lại mật khẩu của bạn.</p>
+    <p class="warning">⏰ Mã xác thực sẽ hết hạn sau <strong>1 giờ</strong>.</p>
     <p class="warning">Nếu bạn không yêu cầu, hãy bỏ qua email này. Mật khẩu của bạn sẽ không thay đổi.</p>
   `);
 

@@ -1,7 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// PRISMA SCHEMA — LuxStay Hotel Booking (SQL Server)
-// ══════════════════════════════════════════════════════════════
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,41 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ──────────────────────────────────────────────
-// USERS
-// ──────────────────────────────────────────────
-
 model User {
-  id                 String    @id @default(uuid())
-  name               String    @db.NVarChar(100)
-  email              String    @unique @db.NVarChar(200)
-  passwordHash       String    @db.NVarChar(255)
-  phone              String?   @db.NVarChar(20)
-  avatarUrl          String?   @db.NVarChar(500)
-  role               String    @default("USER") @db.NVarChar(50)
-
-  // Email verification
-  isEmailVerified    Boolean   @default(false)
-  emailVerifyToken   String?   @db.NVarChar(255)
-  emailVerifyExpiry  DateTime?
-
-  // Password reset
+  id                  String    @id @default(uuid())
+  name                String    @db.NVarChar(100)
+  email               String    @unique @db.NVarChar(200)
+  passwordHash        String    @db.NVarChar(255)
+  phone               String?   @db.NVarChar(20)
+  avatarUrl           String?   @db.NVarChar(500)
+  role                String    @default("USER") @db.NVarChar(50)
+  isEmailVerified     Boolean   @default(false)
+  emailVerifyToken    String?   @db.NVarChar(255)
+  emailVerifyExpiry   DateTime?
   resetPasswordToken  String?   @db.NVarChar(255)
   resetPasswordExpiry DateTime?
-
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  // Relations
-  bookings           Booking[]
-  reviews            Review[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  bookings            Booking[]
+  reviews             Review[]
 
   @@map("Users")
 }
-
-// ──────────────────────────────────────────────
-// ROOMS
-// ──────────────────────────────────────────────
 
 model Room {
   id               String      @id @default(uuid())
@@ -57,28 +38,17 @@ model Room {
   capacityAdults   Int         @default(2)
   capacityChildren Int         @default(0)
   status           String      @default("AVAILABLE") @db.NVarChar(50)
-  
-  // Amenities lưu JSON string: [{icon, label}, ...]
   amenities        String?     @db.NVarChar(Max)
-  
-  // Computed rating (trung bình từ Reviews)
   avgRating        Decimal     @default(0) @db.Decimal(3, 2)
   reviewCount      Int         @default(0)
-
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
-
-  // Relations
-  images           RoomImage[]
   bookings         Booking[]
   reviews          Review[]
+  images           RoomImage[]
 
   @@map("Rooms")
 }
-
-// ──────────────────────────────────────────────
-// ROOM IMAGES (1-N)
-// ──────────────────────────────────────────────
 
 model RoomImage {
   id        String   @id @default(uuid())
@@ -87,96 +57,69 @@ model RoomImage {
   isPrimary Boolean  @default(false)
   order     Int      @default(0)
   createdAt DateTime @default(now())
-
   room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@map("RoomImages")
 }
 
-// ──────────────────────────────────────────────
-// BOOKINGS
-// ──────────────────────────────────────────────
-
 model Booking {
-  id              String        @id @default(uuid())
-  userId          String
-  roomId          String
-
-  checkInDate     DateTime
-  checkOutDate    DateTime
-  nightCount      Int
-  guestsCount     Int           @default(1)
-  roomsCount      Int           @default(1)
-  specialRequest  String?       @db.NVarChar(Max)
-
-  // Pricing (snapshot tại thời điểm đặt)
-  pricePerNight   Decimal       @db.Decimal(18, 2)
-  subtotal        Decimal       @db.Decimal(18, 2)
-  taxRate         Decimal       @default(0.10) @db.Decimal(5, 4)
-  taxAmount       Decimal       @db.Decimal(18, 2)
-  totalPrice      Decimal       @db.Decimal(18, 2)
-
-  status          String        @default("PENDING") @db.NVarChar(50)
-  paymentStatus   String        @default("UNPAID") @db.NVarChar(50)
-  paymentMethod   String?       @db.NVarChar(50)
-
-  // MoMo transaction reference
-  momoOrderId     String?       @unique @db.NVarChar(100)
-  momoTransId     String?       @db.NVarChar(100)
-
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  // Relations
-  user            User          @relation(fields: [userId], references: [id], onDelete: NoAction)
-  room            Room          @relation(fields: [roomId], references: [id], onDelete: NoAction)
-  payment         Payment?
+  id             String   @id @default(uuid())
+  userId         String
+  roomId         String
+  checkInDate    DateTime
+  checkOutDate   DateTime
+  nightCount     Int
+  guestsCount    Int      @default(1)
+  roomsCount     Int      @default(1)
+  specialRequest String?  @db.NVarChar(Max)
+  pricePerNight  Decimal  @db.Decimal(18, 2)
+  subtotal       Decimal  @db.Decimal(18, 2)
+  taxRate        Decimal  @default(0.10) @db.Decimal(5, 4)
+  taxAmount      Decimal  @db.Decimal(18, 2)
+  totalPrice     Decimal  @db.Decimal(18, 2)
+  status         String   @default("PENDING") @db.NVarChar(50)
+  paymentStatus  String   @default("UNPAID") @db.NVarChar(50)
+  paymentMethod  String?  @db.NVarChar(50)
+  momoOrderId    String?  @db.NVarChar(100)
+  momoTransId    String?  @db.NVarChar(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  room           Room     @relation(fields: [roomId], references: [id])
+  user           User     @relation(fields: [userId], references: [id])
+  payment        Payment?
 
   @@map("Bookings")
 }
 
-// ──────────────────────────────────────────────
-// PAYMENTS (Lưu lịch sử giao dịch MoMo)
-// ──────────────────────────────────────────────
-
 model Payment {
-  id              String        @id @default(uuid())
-  bookingId       String        @unique
-  method          String        @db.NVarChar(50)
-  amount          Decimal       @db.Decimal(18, 2)
-  
-  // MoMo specific
-  momoOrderId     String?       @db.NVarChar(100)
-  momoTransId     String?       @db.NVarChar(100)
-  momoResultCode  Int?
-  momoMessage     String?       @db.NVarChar(500)
-  momoPayUrl      String?       @db.NVarChar(1000)
-  
-  status          String        @default("UNPAID") @db.NVarChar(50)
-  paidAt          DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: NoAction)
+  id             String    @id @default(uuid())
+  bookingId      String    @unique
+  method         String    @db.NVarChar(50)
+  amount         Decimal   @db.Decimal(18, 2)
+  momoOrderId    String?   @db.NVarChar(100)
+  momoTransId    String?   @db.NVarChar(100)
+  momoResultCode Int?
+  momoMessage    String?   @db.NVarChar(500)
+  momoPayUrl     String?
+  status         String    @default("UNPAID") @db.NVarChar(50)
+  paidAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  booking        Booking   @relation(fields: [bookingId], references: [id])
 
   @@map("Payments")
 }
-
-// ──────────────────────────────────────────────
-// REVIEWS
-// ──────────────────────────────────────────────
 
 model Review {
   id        String   @id @default(uuid())
   userId    String
   roomId    String
-  rating    Int      // 1-5
+  rating    Int
   comment   String   @db.NVarChar(Max)
   createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction)
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: NoAction)
-
-  @@unique([userId, roomId]) // Mỗi user chỉ review 1 lần mỗi phòng
+  @@unique([userId, roomId])
   @@map("Reviews")
 }

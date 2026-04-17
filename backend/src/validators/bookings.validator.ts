@@ -6,10 +6,10 @@ import { z } from 'zod';
 
 export const createBookingSchema = z
   .object({
-    roomId: z.string({ required_error: 'ID phòng là bắt buộc' }).uuid('ID phòng không hợp lệ'),
+    roomId: z.string({ message: 'ID phòng là bắt buộc' }).uuid('ID phòng không hợp lệ'),
 
     checkInDate: z
-      .string({ required_error: 'Ngày nhận phòng là bắt buộc' })
+      .string({ message: 'Ngày nhận phòng là bắt buộc' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày nhận phòng phải có định dạng YYYY-MM-DD')
       .refine((val) => {
         const date = new Date(val);
@@ -19,11 +19,11 @@ export const createBookingSchema = z
       }, 'Ngày nhận phòng phải từ hôm nay trở đi'),
 
     checkOutDate: z
-      .string({ required_error: 'Ngày trả phòng là bắt buộc' })
+      .string({ message: 'Ngày trả phòng là bắt buộc' })
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày trả phòng phải có định dạng YYYY-MM-DD'),
 
     guestsCount: z
-      .number({ required_error: 'Số lượng khách là bắt buộc' })
+      .number({ message: 'Số lượng khách là bắt buộc' })
       .int('Số lượng khách phải là số nguyên')
       .min(1, 'Tối thiểu 1 khách')
       .max(20, 'Tối đa 20 khách'),
@@ -70,8 +70,7 @@ export const createBookingSchema = z
 
 export const updateBookingStatusSchema = z.object({
   status: z.enum(['CONFIRMED', 'CANCELLED', 'COMPLETED'], {
-    required_error: 'Trạng thái là bắt buộc',
-    invalid_type_error: 'Trạng thái không hợp lệ',
+    message: 'Trạng thái không hợp lệ hoặc bị thiếu'
   }),
 });
 

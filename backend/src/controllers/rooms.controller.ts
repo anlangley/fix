@@ -12,12 +12,14 @@ import type { CreateRoomInput, UpdateRoomInput, RoomQueryInput } from '../valida
  */
 export async function getRooms(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { page, limit, type, location, minPrice, maxPrice }: RoomQueryInput = req.query as any;
+
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
 
     const where: any = {
-      status: { not: 'MAINTENANCE' }, // Không hiện phòng đang bảo trì
+      status: { not: 'MAINTENANCE' },
     };
 
     if (type) where.type = type;

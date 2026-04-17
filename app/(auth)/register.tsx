@@ -20,6 +20,9 @@ const registerSchema = z.object({
     .min(2, 'Tên cần ít nhất 2 ký tự')
     .regex(/^[a-zA-ZÀ-ỹ\s]+$/, 'Tên chỉ được chứa chữ cái và khoảng trắng'),
   email: z.string().min(1, 'Vui lòng nhập Email').email('Email không đúng định dạng'),
+  phone: z.string()
+    .min(10, 'Số điện thoại ít nhất 10 số')
+    .regex(/^(0[3|5|7|8|9])[0-9]{8}$/, 'Số điện thoại không hợp lệ (VD: 0912345678)'),
   password: z.string()
     .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
     .regex(/[A-Z]/, 'Cần ít nhất 1 chữ cái viết hoa')
@@ -39,7 +42,7 @@ export default function RegisterScreen() {
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', password: '', confirmPassword: '' }
+    defaultValues: { name: '', email: '', phone: '', password: '', confirmPassword: '' }
   });
 
   const onSubmit = async (data: RegisterForm) => {
@@ -48,7 +51,9 @@ export default function RegisterScreen() {
       const response = await apiClient.post('/auth/register', {
         name: data.name,
         email: data.email,
+        phone: data.phone,
         password: data.password,
+        confirmPassword: data.confirmPassword,
       });
 
       if (response.data.success) {
@@ -65,7 +70,7 @@ export default function RegisterScreen() {
   };
 
   const renderInput = (
-    name: 'name' | 'email' | 'password' | 'confirmPassword',
+    name: keyof RegisterForm,
     placeholder: string,
     icon: keyof typeof Ionicons.glyphMap,
     options?: { secure?: boolean; showToggle?: boolean; toggleState?: boolean; onToggle?: () => void; keyboardType?: any }
@@ -134,6 +139,7 @@ export default function RegisterScreen() {
                 <Text style={styles.formSubtitle}>Điền thông tin để bắt đầu</Text>
 
                 {renderInput('name', 'Họ và Tên', 'person-outline')}
+                {renderInput('phone', 'Số điện thoại', 'call-outline', { keyboardType: 'phone-pad' })}
                 {renderInput('email', 'Email', 'mail-outline', { keyboardType: 'email-address' })}
                 {renderInput('password', 'Mật khẩu', 'lock-closed-outline', {
                   secure: true, showToggle: true, toggleState: showPassword, onToggle: () => setShowPassword(!showPassword)

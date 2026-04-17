@@ -13,6 +13,7 @@ import type {
   LoginInput,
   ForgotPasswordInput,
   ResetPasswordInput,
+  ChangePasswordInput,
 } from '../validators/auth.validator';
 
 // ══════════════════════════════════════════════
@@ -254,7 +255,8 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
     const genericMsg = 'Nếu email tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu.';
 
     if (user) {
-      const resetPasswordToken = uuidv4();
+      // Tạo mã OTP 6 số
+      const resetPasswordToken = Math.floor(100000 + Math.random() * 900000).toString();
       const resetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       await prisma.user.update({
@@ -263,7 +265,7 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
       });
 
       const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}`;
-      sendPasswordResetEmail(email, user.name, resetUrl).catch(console.error);
+      sendPasswordResetEmail(email, user.name, resetPasswordToken).catch(console.error);
     }
 
     res.status(200).json({ success: true, message: genericMsg });
@@ -309,6 +311,46 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
     res.status(200).json({
       success: true,
       message: 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập với mật khẩu mới.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/auth/change-password
+ * Đổi mật khẩu (dành cho user đã đăng nhập)
+ */
+export async function changePassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { oldPassword, newPassword }: ChangePasswordInput = req.body;
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      return;
+    }
+
+    // Kiểm tra mật khẩu cũ
+    const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!isMatch) {
+      res.status(400).json({ success: false, message: 'Mật khẩu hiện tại không chính xác' });
+      return;
+    }
+
+    // Hash mật khẩu mới
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Đổi mật khẩu thành công!',
     });
   } catch (error) {
     next(error);

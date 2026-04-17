@@ -1,19 +1,19 @@
 import { Router } from 'express';
 import {
-  createMomoPaymentRequest,
-  handleMomoCallback,
+  createVietQRPaymentRequest,
+  confirmPayment,
   getPaymentStatus,
 } from '../controllers/payment.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// ── MoMo Payment ──────────────────────────────
+// ── VietQR Payment ──────────────────────────────
 // Tạo lệnh thanh toán (cần auth)
-router.post('/momo/create', authenticate, createMomoPaymentRequest);
+router.post('/vietqr/create', authenticate, createVietQRPaymentRequest);
 
-// MoMo IPN Callback (MoMo server gọi, KHÔNG cần auth)
-router.post('/momo/callback', handleMomoCallback);
+// Xác nhận đã thanh toán (cần auth)
+router.post('/confirm', authenticate, confirmPayment);
 
 // Kiểm tra trạng thái thanh toán
 router.get('/status/:bookingId', authenticate, getPaymentStatus);

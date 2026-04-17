@@ -119,9 +119,14 @@ export async function createBooking(req: Request, res: Response, next: NextFunct
 export async function getMyBookings(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const userId = req.user!.userId;
+    const { page, limit, status }: BookingQueryInput = req.query as any;
+
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
+
+    const where: any = { userId };
+    if (status) where.status = status;
 
     const [bookings, total] = await Promise.all([
       prisma.booking.findMany({
@@ -161,9 +166,15 @@ export async function getMyBookings(req: Request, res: Response, next: NextFunct
  */
 export async function getAllBookings(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const { page, limit, status, userId }: BookingQueryInput = req.query as any;
+
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
 
     const [bookings, total] = await Promise.all([
       prisma.booking.findMany({
@@ -213,12 +224,26 @@ export async function updateBookingStatus(req: Request, res: Response, next: Nex
       return;
     }
 
-    const updated = await prisma.booking.update({
-      where: { id },
-      data: {
-        status,
-        ...(status === 'CONFIRMED' ? { paymentStatus: 'PAID' } : {}),
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const b = await tx.booking.update({
+        where: { id },
+        data: {
+          status,
+          ...(status === 'CONFIRMED' ? { paymentStatus: 'PAID' } : {}),
+        },
+      });
+
+      if (status === 'CONFIRMED') {
+        await tx.payment.updateMany({
+          where: { bookingId: id },
+          data: {
+            status: 'PAID',
+            paidAt: new Date(),
+          },
+        });
+      }
+
+      return b;
     });
 
     // Gửi email xác nhận nếu booking được duyệt

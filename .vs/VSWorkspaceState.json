@@ -2,14 +2,16 @@
   "ExpandedNodes": [
     "",
     "\\app",
-    "\\app\\(auth)",
     "\\app\\(tabs)",
-    "\\app\\(tabs)\\booking",
     "\\assets",
-    "\\assets\\images",
+    "\\backend",
+    "\\backend\\src",
+    "\\backend\\src\\controllers",
+    "\\backend\\src\\services",
     "\\components",
     "\\hooks",
     "\\scripts"
   ],
+  "SelectedNode": "\\backend",
   "PreviewInSolutionExplorer": false
 }

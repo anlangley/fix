@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,7 +93,19 @@ export default function ProfileScreen() {
       {/* Menu Items */}
       <View style={styles.menuContainer}>
         {MENU_ITEMS.map((item, index) => (
-          <TouchableOpacity key={index} style={styles.menuItem} activeOpacity={0.7}>
+          <TouchableOpacity 
+            key={index} 
+            style={styles.menuItem} 
+            activeOpacity={0.7}
+            onPress={() => {
+              if (item.label === 'Bảo mật') {
+                router.push('/(auth)/change-password');
+              } else {
+                // Placeholder cho các mục khác
+                Alert.alert('Thông tin', `Tính năng ${item.label} đang được phát triển.`);
+              }
+            }}
+          >
             <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}>
               <Ionicons name={item.icon} size={22} color={item.color} />
             </View>

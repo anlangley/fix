@@ -11,27 +11,26 @@ const amenitySchema = z.object({
 
 export const createRoomSchema = z.object({
   name: z
-    .string({ required_error: 'Tên phòng là bắt buộc' })
+    .string({ message: 'Tên phòng là bắt buộc' })
     .min(3, 'Tên phòng cần ít nhất 3 ký tự')
     .max(200, 'Tên phòng không được quá 200 ký tự'),
 
   type: z.enum(['SINGLE', 'DOUBLE', 'SUITE', 'VIP'], {
-    required_error: 'Loại phòng là bắt buộc',
-    invalid_type_error: 'Loại phòng không hợp lệ',
+    message: 'Loại phòng không hợp lệ hoặc bị thiếu'
   }),
 
   pricePerNight: z
-    .number({ required_error: 'Giá phòng là bắt buộc' })
+    .number({ message: 'Giá phòng là bắt buộc' })
     .positive('Giá phòng phải lớn hơn 0')
     .max(100_000_000, 'Giá phòng vượt quá giới hạn'),
 
   location: z
-    .string({ required_error: 'Địa điểm là bắt buộc' })
+    .string({ message: 'Địa điểm là bắt buộc' })
     .min(2, 'Địa điểm không hợp lệ')
     .max(100),
 
   description: z
-    .string({ required_error: 'Mô tả là bắt buộc' })
+    .string({ message: 'Mô tả là bắt buộc' })
     .min(20, 'Mô tả cần ít nhất 20 ký tự'),
 
   capacityAdults: z
@@ -60,7 +59,7 @@ export const roomQuerySchema = z.object({
   minPrice: z.coerce.number().positive().optional(),
   maxPrice: z.coerce.number().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(50).default(10),
+  limit: z.coerce.number().int().positive().max(100).default(10),
 });
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;

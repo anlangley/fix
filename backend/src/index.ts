@@ -1,19 +1,22 @@
-import './config/env'; // Load và validate ENV trước tất cả
-import express from 'express';
 import cors from 'cors';
+import express from 'express';
+import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
+import path from 'path';
+import './config/env'; // Load và validate ENV trước tất cả
 import { env } from './config/env';
-import { errorHandler } from './middlewares/validation.middleware';
 import prisma from './lib/prisma';
+import { errorHandler } from './middlewares/validation.middleware';
 
 // ── Import Routes ──────────────────────────────
-import authRoutes     from './routes/auth.routes';
-import roomsRoutes    from './routes/rooms.routes';
-import bookingRoutes  from './routes/bookings.routes';
-import paymentRoutes  from './routes/payment.routes';
-import reviewRoutes   from './routes/reviews.routes';
+import adminRoutes from './routes/admin.routes';
+import authRoutes from './routes/auth.routes';
+import bookingRoutes from './routes/bookings.routes';
+import paymentRoutes from './routes/payment.routes';
+import reviewRoutes from './routes/reviews.routes';
+import roomsRoutes from './routes/rooms.routes';
+import uploadRoutes from './routes/upload.routes';
 
 // ══════════════════════════════════════════════
 // EXPRESS APP SETUP
@@ -28,8 +31,8 @@ app.use(helmet());
 app.use(
   cors({
     origin: [
-      env.FRONTEND_URL, 
-      'http://localhost:8081', 
+      env.FRONTEND_URL,
+      'http://localhost:8081',
       'http://192.168.1.16:8081',
       'http://localhost:19000',
       'http://localhost:19006'
@@ -59,6 +62,9 @@ app.use('/api/auth/register', authLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Static Files (Uploads) ───────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // ─── Logger ───────────────────────────────────
 if (env.NODE_ENV !== 'test') {
   app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
@@ -75,11 +81,13 @@ app.get('/health', (_req, res) => {
 });
 
 // ── API Routes ────────────────────────────────
-app.use('/api/auth',     authRoutes);
-app.use('/api/rooms',    roomsRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/rooms', roomsRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/reviews',  reviewRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((_req, res) => {
@@ -102,10 +110,10 @@ async function startServer() {
     app.listen(env.PORT, '0.0.0.0', () => {
       console.log('');
       console.log('  ✦ LuxStay Hotel API');
-      console.log(`  ➜ Running on: http://0.0.0.0:${env.PORT}`);
-      console.log(`  ➜ Internal IP: http://192.168.1.16:${env.PORT}`);
-      console.log(`  ➜ Environment: ${env.NODE_ENV}`);
-      console.log(`  ➜ Health check: http://192.168.1.16:${env.PORT}/health`);
+      console.log(`  ➜ Local:        http://localhost:${env.PORT}`);
+      console.log(`  ➜ Network:      ${env.API_BASE_URL}`);
+      console.log(`  ➜ Environment:  ${env.NODE_ENV}`);
+      console.log(`  ➜ Health check: ${env.API_BASE_URL}/health`);
       console.log('');
     });
   } catch (error) {

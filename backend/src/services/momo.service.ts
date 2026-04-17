@@ -59,7 +59,26 @@ export async function createMomoPayment(
 ): Promise<MomoCreatePaymentResult> {
   const { orderId, bookingId, amount, orderInfo } = params;
   const requestId = `${orderId}-${Date.now()}`;
-  const requestType = 'payWithATM'; // Hoặc 'captureWallet' cho MoMo Wallet
+  const requestType = 'payWithATM';
+
+  // Chế độ MOCK nếu chưa cấu hình Key thật
+  if (
+    !env.MOMO_ACCESS_KEY ||
+    env.MOMO_ACCESS_KEY.startsWith('your_') ||
+    !env.MOMO_SECRET_KEY ||
+    env.MOMO_SECRET_KEY.startsWith('your_')
+  ) {
+    console.log('⚠️ [Momo Service] Using MOCK mode (placeholder keys detected)');
+    return {
+      payUrl: 'https://momo.vn/payment-mock',
+      deeplink: 'momo://mock-payment',
+      qrCodeUrl: 'https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg',
+      orderId,
+      requestId,
+      resultCode: 0,
+      message: 'MOCK Success (Development only)',
+    };
+  }
 
   // Dữ liệu extra (base64 JSON)
   const extraData = Buffer.from(JSON.stringify({ bookingId })).toString('base64');

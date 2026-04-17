@@ -1,22 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import prisma from '../lib/prisma';
-import {
-  createMomoPayment,
-  verifyMomoCallback,
-  type MomoCallbackBody,
-} from '../services/momo.service';
 
 // ══════════════════════════════════════════════
-// PAYMENT CONTROLLER — MoMo Integration
+// PAYMENT CONTROLLER — VietQR (MB Bank)
 // ══════════════════════════════════════════════
 
 /**
- * POST /api/payments/momo/create
- * Khởi tạo yêu cầu thanh toán MoMo
- * Frontend nhận payUrl và mở browser/deep link
+ * POST /api/payments/vietqr/create
+ * Khởi tạo thông tin thanh toán VietQR (MB Bank)
  */
-export async function createMomoPaymentRequest(
+export async function createVietQRPaymentRequest(
   req: Request,
   res: Response,
   next: NextFunction
@@ -51,56 +44,52 @@ export async function createMomoPaymentRequest(
       return;
     }
 
-    // Tạo MoMo orderId duy nhất
-    const momoOrderId = `LUX-${uuidv4().slice(0, 8).toUpperCase()}-${Date.now()}`;
-    const amount = Math.round(Number(booking.totalPrice)); // MoMo yêu cầu integer
+    // Thông tin tài khoản MB Bank
+    const bankId = 'MB'; // Ngân hàng Quân Đội
+    const accountNo = '0923847453';
+    const template = 'compact2';
+    const amount = Math.round(Number(booking.totalPrice));
+    const description = `LUX${bookingId.slice(-6).toUpperCase()}`;
+    const accountName = 'LuxStay';
 
-    const orderInfo = `LuxStay - ${booking.room.name} - #${bookingId.slice(-6).toUpperCase()}`;
+    // Tạo URL QR Code từ VietQR API
+    const qrCodeUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-${template}.png?amount=${amount}&addInfo=${description}&accountName=${accountName}`;
 
-    // Gọi MoMo API
-    const momoResult = await createMomoPayment({
-      orderId: momoOrderId,
-      bookingId,
-      amount,
-      orderInfo,
-    });
-
-    // Lưu MoMo order ID vào booking
+    // Cập nhật phương thức thanh toán cho Booking
     await prisma.booking.update({
       where: { id: bookingId },
       data: {
-        momoOrderId,
-        paymentMethod: 'MOMO',
+        paymentMethod: 'VIETQR',
+        paymentStatus: 'UNPAID',
       },
     });
 
-    // Tạo bản ghi Payment
+    // Tạo hoặc cập nhật bản ghi Payment
     await prisma.payment.upsert({
       where: { bookingId },
       create: {
         bookingId,
-        method: 'MOMO',
+        method: 'VIETQR',
         amount: booking.totalPrice,
-        momoOrderId,
-        momoPayUrl: momoResult.payUrl,
         status: 'UNPAID',
       },
       update: {
-        momoOrderId,
-        momoPayUrl: momoResult.payUrl,
+        method: 'VIETQR',
         status: 'UNPAID',
       },
     });
 
     res.status(200).json({
       success: true,
-      message: 'Tạo yêu cầu thanh toán MoMo thành công',
+      message: 'Thông tin thanh toán VietQR đã sẵn sàng',
       data: {
-        payUrl: momoResult.payUrl,
-        deeplink: momoResult.deeplink,
-        qrCodeUrl: momoResult.qrCodeUrl,
-        orderId: momoOrderId,
+        qrCodeUrl,
         amount,
+        bankId,
+        accountNo,
+        accountName,
+        description,
+        bookingId
       },
     });
   } catch (error) {
@@ -109,96 +98,46 @@ export async function createMomoPaymentRequest(
 }
 
 /**
- * POST /api/payments/momo/callback
- * MoMo IPN (Instant Payment Notification) — MoMo gọi endpoint này sau khi thanh toán
- * KHÔNG cần authentication middleware (MoMo server gọi trực tiếp)
+ * POST /api/payments/confirm
+ * Người dùng xác nhận đã thực hiện chuyển khoản thành công
  */
-export async function handleMomoCallback(
+export async function confirmPayment(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const body = req.body as MomoCallbackBody;
-    const { orderId, resultCode, transId, message, extraData } = body;
+    const { bookingId } = req.body as { bookingId: string };
+    const userId = req.user!.userId;
 
-    console.log(`[MoMo IPN] orderId=${orderId} resultCode=${resultCode} transId=${transId}`);
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
 
-    // 1. Xác thực chữ ký từ MoMo (quan trọng — tránh giả mạo)
-    if (!verifyMomoCallback(body)) {
-      console.error('[MoMo IPN] Invalid signature!');
-      res.status(400).json({ success: false, message: 'Chữ ký không hợp lệ' });
+    if (!booking || booking.userId !== userId) {
+      res.status(404).json({ success: false, message: 'Không tìm thấy đơn đặt phòng' });
       return;
     }
 
-    // 2. Parse bookingId từ extraData
-    let bookingId: string | null = null;
-    try {
-      const decoded = JSON.parse(Buffer.from(extraData, 'base64').toString('utf-8'));
-      bookingId = decoded.bookingId;
-    } catch {
-      console.error('[MoMo IPN] Failed to parse extraData');
-    }
+    // Cập nhật trạng thái sang PENDING để chờ Admin xác nhận
+    await prisma.$transaction([
+      prisma.booking.update({
+        where: { id: bookingId },
+        data: { 
+          status: 'PENDING',
+          paymentStatus: 'UNPAID' // Vẫn là UNPAID cho đến khi Admin duyệt
+        },
+      }),
+      prisma.payment.update({
+        where: { bookingId },
+        data: { status: 'PENDING' },
+      }),
+    ]);
 
-    // 3. Cập nhật Payment record
-    const paymentStatus = resultCode === 0 ? 'PAID' : 'FAILED';
-    const bookingStatus = resultCode === 0 ? 'CONFIRMED' : 'PENDING';
-
-    if (bookingId) {
-      await prisma.$transaction(async (tx) => {
-        // Cập nhật Payment
-        await tx.payment.updateMany({
-          where: { momoOrderId: orderId },
-          data: {
-            status: paymentStatus,
-            momoTransId: String(transId),
-            momoResultCode: resultCode,
-            momoMessage: message,
-            paidAt: resultCode === 0 ? new Date() : null,
-          },
-        });
-
-        // Cập nhật Booking
-        await tx.booking.update({
-          where: { id: bookingId! },
-          data: {
-            paymentStatus,
-            status: bookingStatus,
-            momoTransId: String(transId),
-          },
-        });
-      });
-
-      // Nếu thanh toán thành công, gửi email xác nhận
-      if (resultCode === 0) {
-        const booking = await prisma.booking.findUnique({
-          where: { id: bookingId },
-          include: {
-            user: { select: { name: true, email: true } },
-            room: { select: { name: true } },
-          },
-        });
-
-        if (booking) {
-          const { sendBookingConfirmationEmail } = await import('../services/email.service');
-          sendBookingConfirmationEmail(
-            booking.user.email,
-            booking.user.name,
-            {
-              id: booking.id,
-              roomName: booking.room.name,
-              checkIn: booking.checkInDate.toLocaleDateString('vi-VN'),
-              checkOut: booking.checkOutDate.toLocaleDateString('vi-VN'),
-              totalPrice: Number(booking.totalPrice).toLocaleString('vi-VN'),
-              guests: booking.guestsCount,
-            }
-          ).catch(console.error);
-        }
-      }
-    }
-
-    // MoMo expects 200 response
-    res.status(200).json({ message: 'OK' });
+    res.status(200).json({
+      success: true,
+      message: 'Hệ thống đã ghi nhận xác nhận của bạn. Vui lòng chờ Admin kiểm tra và duyệt.'
+    });
   } catch (error) {
     next(error);
   }
@@ -225,7 +164,13 @@ export async function getPaymentStatus(
         paymentStatus: true,
         status: true,
         totalPrice: true,
-        payment: { select: { momoPayUrl: true, paidAt: true, momoMessage: true } },
+        payment: { 
+          select: { 
+            method: true,
+            status: true,
+            paidAt: true 
+          } 
+        },
       },
     });
 

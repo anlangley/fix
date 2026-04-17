@@ -12,92 +12,113 @@ import { apiClient } from '../../../services/api';
 const { width } = Dimensions.get('window');
 
 const PAYMENT_METHODS = [
-  { id: 'momo', name: 'MoMo', desc: 'Ví điện tử MoMo', icon: require('../../../assets/images/momo-logo.png'), color: '#A50064' },
-  { id: 'vnpay', name: 'VNPay', desc: 'Thanh toán VNPay', icon: require('../../../assets/images/vnpay-logo.png'), color: '#005BAA' },
-  { id: 'zalopay', name: 'ZaloPay', desc: 'Ví ZaloPay', icon: require('../../../assets/images/zalo-pay-logo.png'), color: '#008FE5' },
-  { id: 'card', name: 'Thẻ tín dụng', desc: 'Visa / Mastercard', icon: null, color: '#1A1D2E' },
+  { id: 'vietqr', name: 'VietQR (MB Bank)', desc: 'Chuyển khoản qua MB Bank', icon: null, color: '#005BAA' },
 ];
 
 export default function PaymentScreen() {
-  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const { bookingId: initialBookingId, bookingData: rawBookingData } = useLocalSearchParams<{ bookingId: string, bookingData: string }>();
   const router = useRouter();
 
   const [booking, setBooking] = useState<any>(null);
+  const [bookingId, setBookingId] = useState<string | null>(initialBookingId || null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedMethod, setSelectedMethod] = useState('momo');
+  const [selectedMethod, setSelectedMethod] = useState('vietqr');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrData, setQrData] = useState<any>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState<any>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
     if (bookingId) {
       fetchBookingDetails();
+    } else if (rawBookingData) {
+      try {
+        const parsedData = JSON.parse(rawBookingData);
+        setBooking({
+          room: { name: parsedData.roomName },
+          checkInDate: parsedData.checkInDate,
+          checkOutDate: parsedData.checkOutDate,
+          nightCount: parsedData.nightCount,
+          roomsCount: parsedData.roomsCount,
+          guestsCount: parsedData.guestsCount,
+          totalPrice: parsedData.totalPrice,
+          _raw: parsedData,
+        });
+        setIsLoading(false);
+      } catch (e) {
+        console.error('Error parsing booking data:', e);
+        Alert.alert('Lỗi', 'Dữ liệu đặt phòng không hợp lệ.');
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
     }
-    return () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-    };
-  }, [bookingId]);
+  }, [bookingId, rawBookingData]);
 
   const fetchBookingDetails = async () => {
     try {
       setIsLoading(true);
-      const response = await apiClient.get(`/payments/status/${bookingId}`);
+      const response = await apiClient.get(`/bookings/my-bookings`);
       if (response.data?.success) {
-        setBooking(response.data.data.booking);
+        const found = response.data.data.bookings.find((b: any) => b.id === bookingId);
+        if (found) setBooking(found);
       }
     } catch (error) {
       console.error('Error fetching booking for payment:', error);
-      Alert.alert('Lỗi', 'Không thể lấy thông tin đơn hàng.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startPolling = () => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await apiClient.get(`/payments/status/${bookingId}`);
-        if (response.data?.success && response.data.data.booking.paymentStatus === 'PAID') {
-          clearInterval(interval);
-          setPollingInterval(null);
-          setShowQRModal(false);
-          setShowSuccess(true);
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    }, 3000);
-    setPollingInterval(interval);
-  };
-
   const handlePayment = async () => {
-    if (selectedMethod !== 'momo') {
-      Alert.alert('Thông báo', 'Phương thức này đang được bảo trì. Vui lòng chọn MoMo.');
-      return;
-    }
-
     try {
       setIsProcessing(true);
-      const response = await apiClient.post('/payments/momo/create', { bookingId });
+      
+      let currentBookingId = bookingId;
+
+      // BƯỚC 1: Nếu chưa có booking Id, lưu vào DB
+      if (!currentBookingId && booking?._raw) {
+        const { roomName, nightCount, totalPrice, ...cleanData } = booking._raw;
+        const createRes = await apiClient.post('/bookings', cleanData);
+        if (createRes.data?.success) {
+          currentBookingId = createRes.data.data.booking.id;
+          setBookingId(currentBookingId);
+        } else {
+          throw new Error('Không thể khởi tạo đặt phòng.');
+        }
+      }
+
+      if (!currentBookingId) return;
+
+      // BƯỚC 2: Gọi API lấy mã VietQR
+      const response = await apiClient.post('/payments/vietqr/create', { bookingId: currentBookingId });
 
       if (response.data?.success) {
         setQrData(response.data.data);
         setShowQRModal(true);
-        startPolling(); // Bắt đầu kiểm tra trạng thái thanh toán tự động
       }
     } catch (error: any) {
-      console.error('Momo creation failed:', error);
-      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể khởi tạo thanh toán MoMo.');
+      console.error('VietQR creation failed:', error);
+      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể tạo mã thanh toán.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleOpenMomo = () => {
-    if (qrData?.payUrl) {
-      Linking.openURL(qrData.payUrl);
+  const handleConfirmTransfer = async () => {
+    try {
+      setIsConfirming(true);
+      const response = await apiClient.post('/payments/confirm', { bookingId });
+      if (response.data?.success) {
+        setShowQRModal(false);
+        setShowSuccess(true);
+      }
+    } catch (error: any) {
+      console.error('Confirmation failed:', error);
+      Alert.alert('Lỗi', 'Không thể gửi xác nhận. Vui lòng thử lại sau.');
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -171,11 +192,7 @@ export default function PaymentScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.paymentIconContainer, { backgroundColor: method.color + '10' }]}>
-                {method.icon ? (
-                  <Image source={method.icon} style={styles.paymentIcon} />
-                ) : (
-                  <Ionicons name="card-outline" size={24} color={method.color} />
-                )}
+                <Ionicons name="qr-code-outline" size={24} color={method.color} />
               </View>
               <View style={styles.paymentInfo}>
                 <Text style={styles.paymentName}>{method.name}</Text>
@@ -213,8 +230,8 @@ export default function PaymentScreen() {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <Ionicons name="shield-checkmark" size={20} color="#fff" />
-                <Text style={styles.payBtnText}>Xác nhận {formatCurrency(total)}đ</Text>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.payBtnText}>Thanh toán {formatCurrency(total)}đ</Text>
               </>
             )}
           </LinearGradient>
@@ -227,41 +244,59 @@ export default function PaymentScreen() {
           <View style={styles.modalContent}>
             <TouchableOpacity
               style={{ alignSelf: 'flex-end', padding: 10 }}
-              onPress={() => {
-                setShowQRModal(false);
-                if (pollingInterval) clearInterval(pollingInterval);
-              }}
+              onPress={() => setShowQRModal(false)}
             >
               <Ionicons name="close" size={24} color={AppColors.textSecondary} />
             </TouchableOpacity>
 
-            <Image source={require('../../../assets/images/momo-logo.png')} style={{ width: 60, height: 60, marginBottom: 10 }} />
-            <Text style={styles.successTitle}>Quét mã MoMo</Text>
-            <Text style={[styles.successDesc, { marginBottom: 20 }]}>
-              Dùng ứng dụng MoMo để quét mã QR bên dưới để hoàn tất thanh toán.
+            <View style={styles.bankHeader}>
+              <View style={styles.bankLogo}>
+                <Ionicons name="business" size={30} color={AppColors.primary} />
+              </View>
+              <View>
+                <Text style={styles.bankName}>MB Bank (VietQR)</Text>
+                <Text style={styles.accountNo}>STK: {qrData?.accountNo}</Text>
+              </View>
+            </View>
+            
+            <Text style={styles.successTitle}>Quét mã VietQR</Text>
+            <Text style={styles.successDesc}>
+              Sử dụng ứng dụng Ngân hàng để quét mã QR và xác nhận chuyển khoản.
             </Text>
 
-            <View style={{ padding: 20, backgroundColor: '#fff', borderRadius: Radius.lg, ...Shadows.medium }}>
+            <View style={styles.qrContainer}>
               {qrData?.qrCodeUrl ? (
-                <Image source={{ uri: qrData.qrCodeUrl }} style={{ width: 220, height: 220 }} />
+                <Image source={{ uri: qrData.qrCodeUrl }} style={styles.qrImage} />
               ) : (
                 <ActivityIndicator size="large" color={AppColors.primary} />
               )}
             </View>
 
-            <Text style={{ fontSize: 20, fontWeight: 'bold', color: AppColors.primary, marginTop: 20 }}>
+            <View style={styles.transferDetail}>
+                <Text style={styles.detailLabel}>Nội dung:</Text>
+                <Text style={styles.detailValue}>{qrData?.description}</Text>
+            </View>
+
+            <Text style={styles.qrAmount}>
               {formatCurrency(total)}đ
             </Text>
 
             <TouchableOpacity
-              style={[styles.successBtn, { backgroundColor: '#A50064' }]}
-              onPress={handleOpenMomo}
+              style={styles.confirmBtn}
+              onPress={handleConfirmTransfer}
+              disabled={isConfirming}
             >
-              <Text style={[styles.successBtnText, { color: '#fff' }]}>Mở ứng dụng MoMo</Text>
+              <LinearGradient colors={['#059669', '#047857']} style={styles.confirmGradient}>
+                {isConfirming ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                    <Text style={styles.confirmBtnText}>Xác nhận đã chuyển khoản</Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
 
-            <Text style={{ marginTop: 20, fontSize: 12, color: AppColors.textLight }}>
-              Hệ thống đang kiểm tra trạng thái thanh toán...
+            <Text style={styles.modalHint}>
+              Sau khi chuyển khoản, nhấn nút xác nhận bên trên để Admin kiểm tra nhé!
             </Text>
           </View>
         </View>
@@ -269,23 +304,24 @@ export default function PaymentScreen() {
 
       {/* Success Modal */}
       <Modal visible={showSuccess} transparent animationType="fade">
-
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.successCircle}>
               <Ionicons name="checkmark-circle" size={64} color={AppColors.success} />
             </View>
-            <Text style={styles.successTitle}>Thanh Toán Thành Công! 🎉</Text>
+            <Text style={styles.successTitle}>Đã gửi xác nhận! 🎉</Text>
             <Text style={styles.successDesc}>
-              Đơn đặt phòng của bạn đã được xác nhận. Chúng tôi đã gửi email xác nhận đến hộp thư của bạn.
+              Cảm ơn bạn đã thanh toán. Hệ thống đang chờ Admin kiểm tra và duyệt đặt phòng của bạn trong ít phút.
             </Text>
             <View style={styles.successInfo}>
               <View style={styles.successInfoRow}>
                 <Text style={styles.successInfoLabel}>Mã đặt phòng</Text>
-                <Text style={styles.successInfoValue}>#LUX-2026-0411</Text>
+                <Text style={styles.successInfoValue}>
+                  {bookingId ? `#LUX-${bookingId.slice(-6).toUpperCase()}` : 'N/A'}
+                </Text>
               </View>
               <View style={styles.successInfoRow}>
-                <Text style={styles.successInfoLabel}>Tổng thanh toán</Text>
+                <Text style={styles.successInfoLabel}>Tổng tiền</Text>
                 <Text style={styles.successInfoValue}>{formatCurrency(total)}đ</Text>
               </View>
             </View>
@@ -302,15 +338,6 @@ export default function PaymentScreen() {
               >
                 <Text style={styles.successBtnText}>Về Trang Chủ</Text>
               </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setShowSuccess(false);
-                router.push('/(tabs)/history');
-              }}
-              style={{ marginTop: Spacing.md }}
-            >
-              <Text style={styles.viewHistoryLink}>Xem lịch sử đặt phòng →</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -354,7 +381,6 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: Radius.md,
     justifyContent: 'center', alignItems: 'center',
   },
-  paymentIcon: { width: 32, height: 32, resizeMode: 'contain' },
   paymentInfo: { flex: 1, marginLeft: Spacing.md },
   paymentName: { fontSize: 15, fontWeight: '600', color: AppColors.textPrimary },
   paymentDesc: { fontSize: 12, color: AppColors.textSecondary, marginTop: 2 },
@@ -390,8 +416,26 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff', borderRadius: Radius.xl,
-    padding: Spacing.xxl, alignItems: 'center', width: '100%',
+    paddingHorizontal: Spacing.xl, paddingVertical: Spacing.lg, alignItems: 'center', width: '100%',
   },
+  bankHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 15, alignSelf: 'flex-start' },
+  bankLogo: { width: 44, height: 44, borderRadius: 22, backgroundColor: AppColors.background, justifyContent: 'center', alignItems: 'center' },
+  bankName: { fontSize: 16, fontWeight: 'bold', color: AppColors.textPrimary },
+  accountNo: { fontSize: 13, color: AppColors.textSecondary },
+  
+  qrContainer: { padding: 15, backgroundColor: '#fff', borderRadius: Radius.lg, ...Shadows.medium, marginVertical: 10 },
+  qrImage: { width: 220, height: 220 },
+  qrAmount: { fontSize: 24, fontWeight: 'bold', color: AppColors.primary, marginTop: 10 },
+  
+  transferDetail: { flexDirection: 'row', gap: 6, marginTop: 5 },
+  detailLabel: { fontSize: 13, color: AppColors.textSecondary },
+  detailValue: { fontSize: 13, fontWeight: '700', color: AppColors.accent },
+
+  confirmBtn: { width: '100%', marginTop: 25 },
+  confirmGradient: { height: 50, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
+  confirmBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  modalHint: { marginTop: 15, fontSize: 12, color: AppColors.textLight, textAlign: 'center' },
+
   successCircle: { marginBottom: Spacing.lg },
   successTitle: { fontSize: 22, fontWeight: 'bold', color: AppColors.textPrimary, textAlign: 'center' },
   successDesc: {
@@ -411,5 +455,4 @@ const styles = StyleSheet.create({
     height: 50, borderRadius: Radius.md,
   },
   successBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  viewHistoryLink: { color: AppColors.accent, fontSize: 14, fontWeight: '600' },
 });

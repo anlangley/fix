@@ -8,6 +8,7 @@ import {
   getMe,
   forgotPassword,
   resetPassword,
+  changePassword,
 } from '../controllers/auth.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validation.middleware';
@@ -16,6 +17,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from '../validators/auth.validator';
 
 const router = Router();
@@ -30,5 +32,6 @@ router.post('/reset-password',   validate(z.object({ body: resetPasswordSchema }
 
 // ── Protected routes ───────────────────────────
 router.get('/me', authenticate, getMe);
+router.post('/change-password', authenticate, validate(z.object({ body: changePasswordSchema })), changePassword);
 
 export default router;

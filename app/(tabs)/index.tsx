@@ -269,7 +269,13 @@ export default function HomeScreen() {
             key={deal.id}
             style={styles.dealCard}
             activeOpacity={0.9}
-            onPress={() => router.push('/(tabs)/rooms/1')}
+            onPress={() => {
+              if (featuredRooms.length > 0) {
+                router.push(`/(tabs)/rooms/${featuredRooms[0].id}`);
+              } else {
+                router.push('/(tabs)/rooms');
+              }
+            }}
           >
             <Image source={deal.image} style={styles.dealImage} />
             <View style={styles.dealInfo}>
