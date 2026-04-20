@@ -24,6 +24,7 @@ model User {
   updatedAt           DateTime  @updatedAt
   bookings            Booking[]
   reviews             Review[]
+  favorites           Favorite[]
 
   @@map("Users")
 }
@@ -46,6 +47,7 @@ model Room {
   bookings         Booking[]
   reviews          Review[]
   images           RoomImage[]
+  favorites        Favorite[]
 
   @@map("Rooms")
 }
@@ -77,7 +79,7 @@ model Booking {
   taxRate        Decimal  @default(0.10) @db.Decimal(5, 4)
   taxAmount      Decimal  @db.Decimal(18, 2)
   totalPrice     Decimal  @db.Decimal(18, 2)
-  status         String   @default("PENDING") @db.NVarChar(50)
+  status         String   @default("AWAITING_PAYMENT") @db.NVarChar(50)
   paymentStatus  String   @default("UNPAID") @db.NVarChar(50)
   paymentMethod  String?  @db.NVarChar(50)
   momoOrderId    String?  @db.NVarChar(100)
@@ -122,4 +124,16 @@ model Review {
 
   @@unique([userId, roomId])
   @@map("Reviews")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  roomId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@map("Favorites")
 }

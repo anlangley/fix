@@ -92,7 +92,7 @@ export async function createBooking(req: Request, res: Response, next: NextFunct
         taxRate: TAX_RATE,
         taxAmount,
         totalPrice,
-        status: 'PENDING',
+        status: 'AWAITING_PAYMENT',
         paymentStatus: 'UNPAID',
         paymentMethod: paymentMethod || null,
       },
@@ -233,13 +233,25 @@ export async function updateBookingStatus(req: Request, res: Response, next: Nex
         },
       });
 
+      // ĐỒNG BỘ TRẠNG THÁI PHÒNG
       if (status === 'CONFIRMED') {
+        await tx.room.update({
+          where: { id: booking.roomId },
+          data: { status: 'BOOKED' },
+        });
+
         await tx.payment.updateMany({
           where: { bookingId: id },
           data: {
             status: 'PAID',
             paidAt: new Date(),
           },
+        });
+      } else if (status === 'CANCELLED' || status === 'COMPLETED') {
+        // Trả phòng về lại trạng thái Available
+        await tx.room.update({
+          where: { id: booking.roomId },
+          data: { status: 'AVAILABLE' },
         });
       }
 

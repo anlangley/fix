@@ -124,7 +124,7 @@ export async function confirmPayment(
       prisma.booking.update({
         where: { id: bookingId },
         data: { 
-          status: 'PENDING',
+          status: 'AWAITING_CONFIRMATION',
           paymentStatus: 'UNPAID' // Vẫn là UNPAID cho đến khi Admin duyệt
         },
       }),

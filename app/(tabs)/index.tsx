@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { AppColors, Gradients, Radius, Shadows, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -90,9 +90,13 @@ export default function HomeScreen() {
 
   const [featuredRooms, setFeaturedRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFeaturedRooms();
+    fetchFavoriteIds();
+    fetchAvatar();
   }, []);
 
   const fetchFeaturedRooms = async () => {
@@ -108,6 +112,50 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchFavoriteIds = async () => {
+    try {
+      const res = await apiClient.get('/favorites');
+      if (res.data?.success) {
+        const ids = new Set<string>(res.data.data.favorites.map((f: any) => f.room.id));
+        setFavoriteIds(ids);
+      }
+    } catch (error) {
+      // Chưa login thì bỏ qua
+    }
+  };
+
+  const toggleFavorite = async (roomId: string) => {
+    try {
+      const isFav = favoriteIds.has(roomId);
+      // Optimistic UI
+      setFavoriteIds(prev => {
+        const next = new Set(prev);
+        if (isFav) next.delete(roomId);
+        else next.add(roomId);
+        return next;
+      });
+
+      if (isFav) {
+        await apiClient.delete(`/favorites/${roomId}`);
+      } else {
+        await apiClient.post(`/favorites/${roomId}`);
+      }
+    } catch (error) {
+      console.error('Toggle favorite error:', error);
+      // Revert on error
+      fetchFavoriteIds();
+    }
+  };
+
+  const fetchAvatar = async () => {
+    try {
+      const res = await apiClient.get('/auth/me');
+      if (res.data?.success) {
+        setAvatarUrl(res.data.data.user.avatarUrl || null);
+      }
+    } catch (error) {}
+  };
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* ═══ HEADER ═══ */}
@@ -115,7 +163,11 @@ export default function HomeScreen() {
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={22} color={AppColors.accent} />
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+              ) : (
+                <Ionicons name="person" size={22} color={AppColors.accent} />
+              )}
             </View>
             <View>
               <Text style={styles.greeting}>Xin chào 👋</Text>
@@ -123,8 +175,8 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerIcon}>
-              <Ionicons name="heart-outline" size={24} color="#fff" />
+            <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/profile/favorites' as any)}>
+              <Ionicons name="heart" size={24} color={AppColors.danger} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerIcon}>
               <View style={styles.notifBadge} />
@@ -229,8 +281,15 @@ export default function HomeScreen() {
                       <Text style={styles.roomBadgeText}>Hot Deal</Text>
                     </View>
                   )}
-                  <TouchableOpacity style={styles.heartBtn}>
-                    <Ionicons name="heart-outline" size={18} color="#fff" />
+                  <TouchableOpacity
+                    style={[styles.heartBtn, favoriteIds.has(room.id) && styles.heartBtnActive]}
+                    onPress={(e) => { e.stopPropagation(); toggleFavorite(room.id); }}
+                  >
+                    <Ionicons
+                      name={favoriteIds.has(room.id) ? 'heart' : 'heart-outline'}
+                      size={18}
+                      color={favoriteIds.has(room.id) ? AppColors.danger : '#fff'}
+                    />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.roomInfo}>
@@ -326,6 +385,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: AppColors.accent,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   greeting: {
     fontSize: 13,
@@ -509,6 +574,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  heartBtnActive: {
+    backgroundColor: '#fff',
   },
   roomInfo: {
     padding: Spacing.md,

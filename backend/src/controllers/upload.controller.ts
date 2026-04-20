@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '../config/env';
+import prisma from '../lib/prisma';
 
 // Cấu hình lưu trữ
 const storage = multer.diskStorage({
@@ -32,11 +33,10 @@ export const upload = multer({
 });
 
 /**
- * Upload nhiều ảnh
+ * Upload nhiều ảnh (Admin)
  */
 export const uploadImages = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Ép kiểu files về mảng Multer File
     const files = req.files as any[];
     
     if (!files || files.length === 0) {
@@ -49,6 +49,37 @@ export const uploadImages = async (req: Request, res: Response, next: NextFuncti
     res.status(200).json({
       success: true,
       data: { imageUrls },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Upload ảnh đại diện (User)
+ */
+export const uploadAvatar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const file = req.file as any;
+
+    if (!file) {
+      res.status(400).json({ success: false, message: 'Vui lòng chọn ảnh đại diện' });
+      return;
+    }
+
+    const avatarUrl = `${env.API_BASE_URL}/uploads/${file.filename}`;
+
+    // Cập nhật avatarUrl trong DB
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { avatarUrl },
+      select: { id: true, name: true, email: true, phone: true, avatarUrl: true, role: true },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật ảnh đại diện thành công',
+      data: { user, avatarUrl },
     });
   } catch (error) {
     next(error);

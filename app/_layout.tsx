@@ -16,6 +16,9 @@ export default function RootLayout() {
         {/* Admin routes */}
         <Stack.Screen name="admin" options={{ headerShown: false }} />
         
+        {/* Profile sub-screens */}
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
+
         {/* modal screen if needed */}
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>

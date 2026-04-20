@@ -124,6 +124,19 @@ export default function PaymentScreen() {
 
   const formatCurrency = (n: number) => Number(n || 0).toLocaleString('vi-VN');
 
+  const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+    if (typeof date === 'string') {
+      // Nếu là định dạng YYYY-MM-DD từ backend
+      if (date.includes('-')) {
+        const [y, m, d] = date.split('T')[0].split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return new Date(date).toLocaleDateString('vi-VN');
+    }
+    return date.toLocaleDateString('vi-VN');
+  };
+
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -156,11 +169,11 @@ export default function PaymentScreen() {
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Check-in</Text>
-              <Text style={styles.summaryValue}>{new Date(booking.checkInDate).toLocaleDateString('vi-VN')}</Text>
+              <Text style={styles.summaryValue}>{formatDate(booking.checkInDate)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Check-out</Text>
-              <Text style={styles.summaryValue}>{new Date(booking.checkOutDate).toLocaleDateString('vi-VN')}</Text>
+              <Text style={styles.summaryValue}>{formatDate(booking.checkOutDate)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Số đêm</Text>

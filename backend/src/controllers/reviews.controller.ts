@@ -67,7 +67,7 @@ export async function createReview(req: Request, res: Response, next: NextFuncti
       res.status(400).json({
         success: false,
         message: 'Dữ liệu không hợp lệ',
-        errors: parsed.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+        errors: parsed.error.issues.map((e) => ({ field: e.path.join('.'), message: e.message })),
       });
       return;
     }

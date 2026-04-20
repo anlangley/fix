@@ -8,16 +8,20 @@ import { apiClient } from '../../services/api';
 
 const TABS = [
   { id: 'all', label: 'Tất cả' },
-  { id: 'CONFIRMED', label: 'Xác nhận' },
-  { id: 'PENDING', label: 'Chờ duyệt' },
+  { id: 'AWAITING_CONFIRMATION', label: 'Chờ xác nhận ❥' },
+  { id: 'AWAITING_PAYMENT', label: 'Chờ thanh toán' },
+  { id: 'CONFIRMED', label: 'Đã duyệt' },
   { id: 'CANCELLED', label: 'Đã hủy' },
 ];
 
 const getStatusConfig = (status: string) => {
   switch (status) {
-    case 'CONFIRMED': return { label: 'Xác nhận', color: AppColors.success, bg: AppColors.successLight, icon: 'checkmark-circle' as const };
+    case 'AWAITING_PAYMENT': return { label: 'Chờ thanh toán', color: '#F59E0B', bg: '#FEF3C7', icon: 'wallet-outline' as const };
+    case 'AWAITING_CONFIRMATION': return { label: 'Chờ xác nhận', color: '#8B5CF6', bg: '#EDE9FE', icon: 'hourglass-outline' as const };
+    case 'CONFIRMED': return { label: 'Đã duyệt', color: AppColors.success, bg: AppColors.successLight, icon: 'checkmark-circle' as const };
     case 'PENDING': return { label: 'Chờ duyệt', color: AppColors.warning, bg: AppColors.warningLight, icon: 'time' as const };
     case 'CANCELLED': return { label: 'Đã hủy', color: AppColors.danger, bg: AppColors.dangerLight, icon: 'close-circle' as const };
+    case 'COMPLETED': return { label: 'Hoàn thành', color: AppColors.textSecondary, bg: AppColors.borderLight, icon: 'checkmark-done-circle' as const };
     default: return { label: status, color: AppColors.textSecondary, bg: AppColors.borderLight, icon: 'ellipsis-horizontal' as const };
   }
 };
@@ -180,7 +184,7 @@ export default function AdminBookingsScreen() {
 
               <View style={styles.cardFooter}>
                 <Text style={styles.amount}>{Number(item.totalPrice).toLocaleString('vi-VN')}đ</Text>
-                {item.status === 'PENDING' && (
+                {(item.status === 'AWAITING_CONFIRMATION' || item.status === 'PENDING') && (
                   <View style={styles.actionRow}>
                     {isProcessing ? (
                       <ActivityIndicator size="small" color={AppColors.primary} />

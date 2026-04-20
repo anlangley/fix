@@ -23,6 +23,10 @@ const TABS = [
 
 const getStatusConfig = (status: string) => {
   switch (status) {
+    case 'AWAITING_PAYMENT':
+      return { label: 'Chờ thanh toán', color: '#F59E0B', bg: '#FEF3C7', icon: 'wallet-outline' as const };
+    case 'AWAITING_CONFIRMATION':
+      return { label: 'Chờ xác nhận', color: '#8B5CF6', bg: '#EDE9FE', icon: 'hourglass-outline' as const };
     case 'PENDING':
       return { label: 'Chờ duyệt', color: AppColors.info, bg: AppColors.infoLight, icon: 'time-outline' as const };
     case 'CONFIRMED':
@@ -69,7 +73,7 @@ export default function HistoryScreen() {
   const filteredBookings = activeTab === 'all'
     ? bookings
     : bookings.filter((b) => {
-      if (activeTab === 'upcoming') return b.status === 'PENDING' || b.status === 'CONFIRMED';
+      if (activeTab === 'upcoming') return ['PENDING', 'CONFIRMED', 'AWAITING_PAYMENT', 'AWAITING_CONFIRMATION'].includes(b.status);
       return b.status.toLowerCase() === activeTab.toLowerCase();
     });
 

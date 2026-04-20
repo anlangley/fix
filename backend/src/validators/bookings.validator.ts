@@ -69,13 +69,13 @@ export const createBookingSchema = z
   );
 
 export const updateBookingStatusSchema = z.object({
-  status: z.enum(['CONFIRMED', 'CANCELLED', 'COMPLETED'], {
+  status: z.enum(['AWAITING_PAYMENT', 'AWAITING_CONFIRMATION', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'PENDING'], {
     message: 'Trạng thái không hợp lệ hoặc bị thiếu'
   }),
 });
 
 export const bookingQuerySchema = z.object({
-  status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED']).optional(),
+  status: z.enum(['AWAITING_PAYMENT', 'AWAITING_CONFIRMATION', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED']).optional(),
   userId: z.string().uuid().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(50).default(10),

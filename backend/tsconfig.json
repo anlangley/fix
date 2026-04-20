@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "node16",
     "lib": [
       "ES2020"
     ],
@@ -15,7 +15,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node16"
   },
   "include": [
     "src/**/*"
@@ -24,5 +24,6 @@
     "node_modules",
     "dist",
     "prisma"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -1,32 +1,85 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking, Platform, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../constants/theme';
+import { apiClient } from '../../services/api';
 
 const MENU_ITEMS = [
-  { icon: 'person-outline' as const, label: 'Thông tin cá nhân', color: '#3B82F6' },
-  { icon: 'heart-outline' as const, label: 'Phòng yêu thích', color: '#EF4444' },
-  { icon: 'card-outline' as const, label: 'Phương thức thanh toán', color: '#10B981' },
-  { icon: 'notifications-outline' as const, label: 'Thông báo', color: '#F59E0B' },
-  { icon: 'shield-checkmark-outline' as const, label: 'Bảo mật', color: '#8B5CF6' },
-  { icon: 'language-outline' as const, label: 'Ngôn ngữ', color: '#06B6D4' },
-  { icon: 'help-circle-outline' as const, label: 'Trung tâm hỗ trợ', color: '#6366F1' },
-  { icon: 'star-outline' as const, label: 'Đánh giá ứng dụng', color: '#F59E0B' },
-  { icon: 'information-circle-outline' as const, label: 'Về chúng tôi', color: '#64748B' },
+  { icon: 'person-outline' as const, label: 'Thông tin cá nhân', color: '#3B82F6', route: '/profile/edit' },
+  { icon: 'heart-outline' as const, label: 'Phòng yêu thích', color: '#EF4444', route: '/profile/favorites' },
+  { icon: 'card-outline' as const, label: 'Phương thức thanh toán', color: '#10B981', route: '/profile/payment-methods' },
+  { icon: 'notifications-outline' as const, label: 'Thông báo', color: '#F59E0B', route: '/profile/notifications' },
+  { icon: 'shield-checkmark-outline' as const, label: 'Bảo mật', color: '#8B5CF6', route: '/(auth)/change-password' },
+  { icon: 'language-outline' as const, label: 'Ngôn ngữ', color: '#06B6D4', route: '/profile/language' },
+  { icon: 'help-circle-outline' as const, label: 'Trung tâm hỗ trợ', color: '#6366F1', route: '/profile/help' },
+  { icon: 'star-outline' as const, label: 'Đánh giá ứng dụng', color: '#F59E0B', route: 'rate' },
+  { icon: 'information-circle-outline' as const, label: 'Về chúng tôi', color: '#64748B', route: '/profile/about' },
 ];
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [stats, setStats] = useState({ totalBookings: 0, confirmedBookings: 0, memberSince: '' });
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchStats();
+    fetchAvatar();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await apiClient.get('/auth/profile/stats');
+      if (res.data?.success) {
+        setStats(res.data.data);
+      }
+    } catch (error) {
+      console.error('Fetch stats error:', error);
+    }
+  };
+
+  const fetchAvatar = async () => {
+    try {
+      const res = await apiClient.get('/auth/me');
+      if (res.data?.success) {
+        setAvatarUrl(res.data.data.user.avatarUrl || null);
+      }
+    } catch (error) {}
+  };
 
   const handleLogout = async () => {
     await logout();
     router.replace('/(auth)/login');
+  };
+
+  const handleMenuPress = (item: typeof MENU_ITEMS[0]) => {
+    if (item.route === 'rate') {
+      // Mở trang đánh giá ứng dụng trên Store
+      const storeUrl = Platform.OS === 'ios'
+        ? 'https://apps.apple.com/app/luxstay/id123456789'
+        : 'https://play.google.com/store/apps/details?id=com.luxstay.hotel';
+      Alert.alert(
+        'Đánh giá ứng dụng ⭐',
+        'Cảm ơn bạn đã sử dụng LuxStay! Đánh giá 5 sao giúp chúng tôi phát triển tốt hơn.',
+        [
+          { text: 'Để sau', style: 'cancel' },
+          { text: 'Đánh giá ngay', onPress: () => Linking.openURL(storeUrl) },
+        ]
+      );
+      return;
+    }
+    router.push(item.route as any);
+  };
+
+  const formatMemberDate = (dateStr: string) => {
+    if (!dateStr) return 'Mới';
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}/${d.getFullYear()}`;
   };
 
   return (
@@ -34,61 +87,40 @@ export default function ProfileScreen() {
       {/* Header with Avatar */}
       <LinearGradient colors={Gradients.primary as [string, string]} style={styles.header}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(user?.name || user?.email || 'K')[0].toUpperCase()}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.editAvatarBtn}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {(user?.name || user?.email || 'K')[0].toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.editAvatarBtn} onPress={() => router.push('/profile/edit' as any)}>
             <Ionicons name="camera" size={14} color="#fff" />
           </TouchableOpacity>
         </View>
         <Text style={styles.userName}>{user?.name || user?.email?.split('@')[0] || 'Khách hàng'}</Text>
         <Text style={styles.userEmail}>{user?.email || ''}</Text>
 
-        {/* Stats Row */}
+        {/* Stats Row — Dynamic */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>5</Text>
+            <Text style={styles.statValue}>{stats.totalBookings}</Text>
             <Text style={styles.statLabel}>Đặt phòng</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>1.250</Text>
-            <Text style={styles.statLabel}>Điểm thưởng</Text>
+            <Text style={styles.statValue}>{stats.confirmedBookings}</Text>
+            <Text style={styles.statLabel}>Đã duyệt</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>Gold</Text>
-            <Text style={styles.statLabel}>Hạng thành viên</Text>
+            <Text style={styles.statValue}>{formatMemberDate(stats.memberSince)}</Text>
+            <Text style={styles.statLabel}>Tham gia</Text>
           </View>
         </View>
       </LinearGradient>
-
-      {/* Membership Card */}
-      <View style={styles.membershipContainer}>
-        <LinearGradient
-          colors={['#D4A853', '#B8892F', '#8B6914']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.membershipCard}
-        >
-          <View style={styles.membershipHeader}>
-            <View>
-              <Text style={styles.membershipTitle}>LuxStay Gold</Text>
-              <Text style={styles.membershipDesc}>Thành viên vàng</Text>
-            </View>
-            <Ionicons name="diamond" size={28} color="rgba(255,255,255,0.8)" />
-          </View>
-          <View style={styles.membershipFooter}>
-            <Text style={styles.membershipPoints}>1.250 điểm</Text>
-            <Text style={styles.membershipNext}>Còn 750 điểm để lên Platinum</Text>
-          </View>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: '62.5%' }]} />
-          </View>
-        </LinearGradient>
-      </View>
 
       {/* Menu Items */}
       <View style={styles.menuContainer}>
@@ -97,14 +129,7 @@ export default function ProfileScreen() {
             key={index} 
             style={styles.menuItem} 
             activeOpacity={0.7}
-            onPress={() => {
-              if (item.label === 'Bảo mật') {
-                router.push('/(auth)/change-password');
-              } else {
-                // Placeholder cho các mục khác
-                Alert.alert('Thông tin', `Tính năng ${item.label} đang được phát triển.`);
-              }
-            }}
+            onPress={() => handleMenuPress(item)}
           >
             <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}>
               <Ionicons name={item.icon} size={22} color={item.color} />
@@ -141,6 +166,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 3, borderColor: AppColors.accent,
   },
+  avatarImage: {
+    width: 80, height: 80, borderRadius: 40,
+    borderWidth: 3, borderColor: AppColors.accent,
+  },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
   editAvatarBtn: {
     position: 'absolute', bottom: 0, right: -4,
@@ -163,28 +192,6 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   statDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.2)' },
-
-  membershipContainer: { marginHorizontal: Spacing.lg, marginTop: -Spacing.md },
-  membershipCard: {
-    borderRadius: Radius.lg, padding: Spacing.xl,
-    ...Shadows.large,
-  },
-  membershipHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
-  membershipTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  membershipDesc: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
-  membershipFooter: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginTop: Spacing.lg,
-  },
-  membershipPoints: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  membershipNext: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
-  progressBar: {
-    height: 6, backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 3, marginTop: Spacing.sm, overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#fff', borderRadius: 3 },
 
   menuContainer: {
     marginHorizontal: Spacing.lg, marginTop: Spacing.xxl,

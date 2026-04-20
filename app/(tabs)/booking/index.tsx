@@ -57,9 +57,6 @@ export default function BookingForm() {
       setIsSubmitting(true);
       
       // Chuyển đổi ngày sang định dạng ISO cho Backend (YYYY-MM-DD)
-      const toISO = (date: Date) => {
-        return date.toISOString().split('T')[0];
-      };
 
       const isoCheckIn = toISO(checkIn);
       const isoCheckOut = toISO(checkOut);
@@ -110,6 +107,11 @@ export default function BookingForm() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Chuyển đổi ngày sang định dạng ISO cho Backend (YYYY-MM-DD)
+  const toISO = (date: Date) => {
+    return date.toISOString().split('T')[0];
   };
 
   // Tính toán số đêm và tổng tiền

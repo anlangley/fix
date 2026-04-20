@@ -1,0 +1,15 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\assets",
+    "\\backend",
+    "\\backend\\src",
+    "\\backend\\src\\config",
+    "\\backend\\src\\controllers",
+    "\\backend\\src\\services",
+    "\\components",
+    "\\hooks",
+    "\\scripts"
+  ],
+  "PreviewInSolutionExplorer": false
+}

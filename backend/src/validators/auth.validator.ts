@@ -119,9 +119,27 @@ export const changePasswordSchema = z
     path: ['confirmPassword'],
   });
 
+/**
+ * Cập nhật thông tin cá nhân
+ */
+export const updateProfileSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Tên cần ít nhất 2 ký tự')
+    .max(100, 'Tên không được quá 100 ký tự')
+    .regex(/^[a-zA-ZÀ-ỹ\s]+$/, 'Tên chỉ được chứa chữ cái và khoảng trắng')
+    .optional(),
+  phone: z
+    .string()
+    .regex(/^(0[3|5|7|8|9])[0-9]{8}$/, 'Số điện thoại không hợp lệ (VD: 0912345678)')
+    .optional()
+    .or(z.literal('')),
+});
+
 // Export types
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

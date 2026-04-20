@@ -1,17 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodError } from 'zod';
-
-// ══════════════════════════════════════════════
-// VALIDATION MIDDLEWARE
-// ══════════════════════════════════════════════
-
-import { AnyZodObject } from 'zod';
+import { ZodError, ZodObject } from 'zod';
 
 /**
  * Validate request body, query, params với Zod schema
  * Trả về 400 nếu data không hợp lệ với danh sách lỗi chi tiết
  */
-export function validate(schema: AnyZodObject) {
+export function validate(schema: ZodObject<any, any>) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       await schema.parseAsync({
@@ -22,7 +16,7 @@ export function validate(schema: AnyZodObject) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.errors.map((e) => ({
+        const errors = error.issues.map((e) => ({
           field: e.path.slice(1).join('.'), // Bỏ prefix 'body.', 'query.' etc.
           message: e.message,
         }));

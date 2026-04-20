@@ -14,6 +14,7 @@ import type {
   ForgotPasswordInput,
   ResetPasswordInput,
   ChangePasswordInput,
+  UpdateProfileInput,
 } from '../validators/auth.validator';
 
 // ══════════════════════════════════════════════
@@ -351,6 +352,72 @@ export async function changePassword(req: Request, res: Response, next: NextFunc
     res.status(200).json({
       success: true,
       message: 'Đổi mật khẩu thành công!',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PUT /api/auth/profile
+ * Cập nhật thông tin cá nhân (tên, SĐT)
+ */
+export async function updateProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = req.user!.userId;
+    const { name, phone }: UpdateProfileInput = req.body;
+
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (phone !== undefined) data.phone = phone || null;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        avatarUrl: true,
+        role: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật thông tin thành công',
+      data: { user },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/auth/profile/stats
+ * Lấy thống kê người dùng (số booking, ngày tham gia)
+ */
+export async function getProfileStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const userId = req.user!.userId;
+
+    const [user, totalBookings, confirmedBookings] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { createdAt: true },
+      }),
+      prisma.booking.count({ where: { userId } }),
+      prisma.booking.count({ where: { userId, status: 'CONFIRMED' } }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalBookings,
+        confirmedBookings,
+        memberSince: user?.createdAt,
+      },
     });
   } catch (error) {
     next(error);

@@ -17,6 +17,7 @@ import paymentRoutes from './routes/payment.routes';
 import reviewRoutes from './routes/reviews.routes';
 import roomsRoutes from './routes/rooms.routes';
 import uploadRoutes from './routes/upload.routes';
+import favoritesRoutes from './routes/favorites.routes';
 
 // ══════════════════════════════════════════════
 // EXPRESS APP SETUP
@@ -33,7 +34,7 @@ app.use(
     origin: [
       env.FRONTEND_URL,
       'http://localhost:8081',
-      'http://192.168.1.16:8081',
+      'http://172.20.10.4:8081',
       'http://localhost:19000',
       'http://localhost:19006'
     ],
@@ -88,6 +89,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/favorites', favoritesRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((_req, res) => {

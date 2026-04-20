@@ -15,6 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (token: string, userData: UserData) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (userData: Partial<UserData>) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -59,8 +60,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
   };
 
+  const updateUser = async (userData: Partial<UserData>) => {
+    if (user) {
+      const updated = { ...user, ...userData };
+      await saveSecureItem(USER_KEY, JSON.stringify(updated));
+      setUser(updated);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -34,6 +34,7 @@ export default function RoomDetail() {
 
   useEffect(() => {
     fetchRoomDetail();
+    checkFavoriteStatus();
   }, [id]);
 
   const fetchRoomDetail = async () => {
@@ -47,6 +48,31 @@ export default function RoomDetail() {
       console.error('Error fetching room detail:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkFavoriteStatus = async () => {
+    try {
+      const res = await apiClient.get(`/favorites/check/${id}`);
+      if (res.data?.success) {
+        setIsFavorite(res.data.data.isFavorited);
+      }
+    } catch (error) {
+      // Nếu chưa login thì bỏ qua
+    }
+  };
+
+  const toggleFavorite = async () => {
+    try {
+      if (isFavorite) {
+        await apiClient.delete(`/favorites/${id}`);
+        setIsFavorite(false);
+      } else {
+        await apiClient.post(`/favorites/${id}`);
+        setIsFavorite(true);
+      }
+    } catch (error) {
+      console.error('Toggle favorite error:', error);
     }
   };
 
@@ -105,7 +131,7 @@ export default function RoomDetail() {
 
           <TouchableOpacity
             style={styles.favBtn}
-            onPress={() => setIsFavorite(!isFavorite)}
+            onPress={toggleFavorite}
           >
             <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? AppColors.danger : "#fff"} />
           </TouchableOpacity>

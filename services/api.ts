@@ -7,7 +7,7 @@ const USER_KEY = 'user_data';
 
 import { Platform } from 'react-native';
 
-const LOCAL_IP = '192.168.1.16'; // IP máy tính của bạn
+const LOCAL_IP = '172.20.10.4'; // IP máy tính của bạn
 const PORT = '3000';
 
 // Tự động xác định BASE_URL dựa trên môi trường chạy
