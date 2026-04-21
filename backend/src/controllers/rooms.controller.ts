@@ -12,7 +12,7 @@ import type { CreateRoomInput, UpdateRoomInput, RoomQueryInput } from '../valida
  */
 export async function getRooms(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { page, limit, type, location, minPrice, maxPrice }: RoomQueryInput = req.query as any;
+    const { page, limit, type, location, minPrice, maxPrice, checkIn, checkOut }: RoomQueryInput = req.query as any;
 
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
@@ -28,6 +28,22 @@ export async function getRooms(req: Request, res: Response, next: NextFunction):
       where.pricePerNight = {
         ...(minPrice ? { gte: minPrice } : {}),
         ...(maxPrice ? { lte: maxPrice } : {}),
+      };
+    }
+
+    // ── Lọc phòng theo ngày khả dụng ──────────────
+    // Loại trừ phòng có booking PENDING/CONFIRMED giao thoa với khoảng checkIn-checkOut
+    if (checkIn && checkOut) {
+      const checkInDate = new Date(checkIn);
+      const checkOutDate = new Date(checkOut);
+
+      where.bookings = {
+        none: {
+          status: { in: ['PENDING', 'CONFIRMED'] },
+          // Giao thoa xảy ra khi: bookingStart < searchEnd AND bookingEnd > searchStart
+          checkInDate: { lt: checkOutDate },
+          checkOutDate: { gt: checkInDate },
+        },
       };
     }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows, Radius, Spacing } from '../../constants/theme';
@@ -121,9 +121,13 @@ export default function AdminUsersScreen() {
               onLongPress={() => handleToggleRole(item)}
             >
               <View style={[styles.avatar, { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] + '20' }]}>
-                <Text style={[styles.avatarText, { color: AVATAR_COLORS[index % AVATAR_COLORS.length] }]}>
-                  {item.name[0]}
-                </Text>
+                {item.avatarUrl ? (
+                  <Image source={{ uri: item.avatarUrl }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={[styles.avatarText, { color: AVATAR_COLORS[index % AVATAR_COLORS.length] }]}>
+                    {item.name[0]?.toUpperCase() || 'U'}
+                  </Text>
+                )}
               </View>
               <View style={styles.userInfo}>
                 <View style={styles.userNameRow}>
@@ -180,7 +184,9 @@ const styles = StyleSheet.create({
   avatar: {
     width: 48, height: 48, borderRadius: 24,
     justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontSize: 20, fontWeight: 'bold' },
   userInfo: { flex: 1 },
   userNameRow: {

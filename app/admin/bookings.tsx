@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows, Radius, Spacing } from '../../constants/theme';
@@ -126,7 +126,11 @@ export default function AdminBookingsScreen() {
               <View style={styles.cardHeader}>
                 <View style={styles.guestRow}>
                   <View style={styles.guestAvatar}>
-                    <Text style={styles.guestAvatarText}>{item.user?.name?.[0] || 'U'}</Text>
+                    {item.user?.avatarUrl ? (
+                      <Image source={{ uri: item.user.avatarUrl }} style={styles.avatarImg} />
+                    ) : (
+                      <Text style={styles.guestAvatarText}>{item.user?.name?.[0]?.toUpperCase() || 'U'}</Text>
+                    )}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.guestName}>{item.user?.name}</Text>
@@ -243,7 +247,9 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: AppColors.primary + '15',
     justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   guestAvatarText: { fontSize: 16, fontWeight: '700', color: AppColors.primary },
   guestName: { fontSize: 15, fontWeight: '600', color: AppColors.textPrimary },
   guestEmail: { fontSize: 12, color: AppColors.textSecondary },

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Image, Dimensions, TextInput, ActivityIndicator,
+  Image, Dimensions, TextInput, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { AppColors, Shadows, Radius, Spacing, Typography, Gradients } from '../../../constants/theme';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../../constants/theme';
 import { apiClient } from '../../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -32,24 +33,40 @@ const StarRating = ({ rating, size = 12 }: { rating: number; size?: number }) =>
   </View>
 );
 
+const formatDate = (date: Date) =>
+  date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
 export default function RoomList() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ checkIn?: string; checkOut?: string }>();
+
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // ── Date Picker State ──────────────
+  const [checkIn, setCheckIn] = useState<Date | null>(
+    params.checkIn ? new Date(params.checkIn) : null
+  );
+  const [checkOut, setCheckOut] = useState<Date | null>(
+    params.checkOut ? new Date(params.checkOut) : null
+  );
+  const [showPicker, setShowPicker] = useState<'checkIn' | 'checkOut' | null>(null);
+
   useEffect(() => {
     fetchRooms();
-  }, [activeFilter]);
+  }, [activeFilter, checkIn, checkOut]);
 
   const fetchRooms = async () => {
     try {
       setIsLoading(true);
-      const params: any = {};
-      if (activeFilter !== 'all') params.type = activeFilter.toUpperCase();
-      
-      const response = await apiClient.get('/rooms', { params });
+      const queryParams: any = {};
+      if (activeFilter !== 'all') queryParams.type = activeFilter;
+      if (checkIn) queryParams.checkIn = checkIn.toISOString().split('T')[0];
+      if (checkOut) queryParams.checkOut = checkOut.toISOString().split('T')[0];
+
+      const response = await apiClient.get('/rooms', { params: queryParams });
       if (response.data?.success) {
         setRooms(response.data.data.rooms);
       }
@@ -61,23 +78,44 @@ export default function RoomList() {
   };
 
   const filteredRooms = rooms.filter((room) => {
-    const matchSearch = room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchSearch =
+      room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       room.location.toLowerCase().includes(searchQuery.toLowerCase());
     return matchSearch;
   });
 
-  const getBadgeColor = (badge: string) => {
-    switch (badge) {
-      case 'Hot Deal': return AppColors.danger;
-      case 'Premium': return AppColors.accent;
-      case 'Exclusive': return '#8B5CF6';
-      case 'Giá tốt': return AppColors.success;
-      default: return AppColors.secondary;
+  // Xử lý khi người dùng chọn ngày
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowPicker(null);
+      return;
     }
+    if (!selectedDate) return;
+
+    if (showPicker === 'checkIn') {
+      setCheckIn(selectedDate);
+      // Nếu checkout đã có và trước ngày mới chọn -> reset checkout
+      if (checkOut && selectedDate >= checkOut) {
+        const nextDay = new Date(selectedDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        setCheckOut(nextDay);
+      }
+    } else if (showPicker === 'checkOut') {
+      setCheckOut(selectedDate);
+    }
+    setShowPicker(null);
+  };
+
+  const clearDates = () => {
+    setCheckIn(null);
+    setCheckOut(null);
   };
 
   const renderRoom = ({ item }: { item: any }) => {
-    const primaryImage = item.images?.find((img: any) => img.isPrimary)?.url || item.images?.[0]?.url || 'https://via.placeholder.com/300x200';
+    const primaryImage =
+      item.images?.find((img: any) => img.isPrimary)?.url ||
+      item.images?.[0]?.url ||
+      'https://via.placeholder.com/300x200';
     const amenities = item.amenities ? JSON.parse(item.amenities) : [];
 
     return (
@@ -92,16 +130,15 @@ export default function RoomList() {
             colors={['transparent', 'rgba(0,0,0,0.4)']}
             style={styles.roomImageOverlay}
           />
-          {item.pricePerNight < 2000000 && (
-            <View style={[styles.roomBadge, { backgroundColor: getBadgeColor('Hot Deal') }]}>
+          {Number(item.pricePerNight) < 2000000 && (
+            <View style={[styles.roomBadge, { backgroundColor: AppColors.danger }]}>
               <Text style={styles.roomBadgeText}>Hot Deal</Text>
             </View>
           )}
-          <TouchableOpacity style={styles.heartBtn}>
-            <Ionicons name="heart-outline" size={20} color="#fff" />
-          </TouchableOpacity>
           <View style={styles.priceOverlay}>
-            <Text style={styles.priceOverlayText}>{Number(item.pricePerNight).toLocaleString('vi-VN')}đ</Text>
+            <Text style={styles.priceOverlayText}>
+              {Number(item.pricePerNight).toLocaleString('vi-VN')}đ
+            </Text>
             <Text style={styles.pricePerNight}>/đêm</Text>
           </View>
         </View>
@@ -113,14 +150,15 @@ export default function RoomList() {
           </View>
           <View style={styles.bottomRow}>
             <View style={styles.ratingRow}>
-              <StarRating rating={item.avgRating || 0} />
-              <Text style={styles.ratingText}>{item.avgRating || 0}</Text>
+              <StarRating rating={Number(item.avgRating) || 0} />
+              <Text style={styles.ratingText}>{Number(item.avgRating) || 0}</Text>
               <Text style={styles.reviewsText}>({item.reviewCount || 0} đánh giá)</Text>
             </View>
             <View style={styles.amenitiesRow}>
-              {Array.isArray(amenities) && amenities.slice(0, 3).map((amenity: any, idx: number) => (
-                <Ionicons key={idx} name={amenity.icon || 'help-outline'} size={14} color={AppColors.textLight} />
-              ))}
+              {Array.isArray(amenities) &&
+                amenities.slice(0, 3).map((amenity: any, idx: number) => (
+                  <Ionicons key={idx} name={amenity.icon || 'help-outline'} size={14} color={AppColors.textLight} />
+                ))}
             </View>
           </View>
         </View>
@@ -128,31 +166,51 @@ export default function RoomList() {
     );
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient colors={Gradients.primary as [string, string]} style={styles.header}>
-        <Text style={styles.headerTitle}>Tìm Phòng</Text>
-        <Text style={styles.headerSubtitle}>{filteredRooms.length} phòng đang chờ bạn</Text>
-        {/* Search */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color={AppColors.textSecondary} />
-          <TextInput
-            placeholder="Tìm theo tên, địa điểm..."
-            placeholderTextColor={AppColors.textLight}
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={AppColors.textLight} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </LinearGradient>
+  // Ghép header + filter thành ListHeaderComponent để FlatList cuộn mượt
+  const ListHeader = () => (
+    <>
+      {/* ── Date Picker Bar ── */}
+      <View style={styles.dateBar}>
+        <TouchableOpacity
+          style={[styles.dateChip, checkIn && styles.dateChipActive]}
+          onPress={() => setShowPicker('checkIn')}
+        >
+          <Ionicons name="calendar-outline" size={15} color={checkIn ? AppColors.primary : AppColors.textSecondary} />
+          <Text style={[styles.dateChipText, checkIn && styles.dateChipTextActive]}>
+            {checkIn ? formatDate(checkIn) : 'Check-in'}
+          </Text>
+        </TouchableOpacity>
 
-      {/* Filters */}
+        <Ionicons name="arrow-forward" size={16} color={AppColors.textLight} style={{ marginHorizontal: 4 }} />
+
+        <TouchableOpacity
+          style={[styles.dateChip, checkOut && styles.dateChipActive]}
+          onPress={() => setShowPicker('checkOut')}
+        >
+          <Ionicons name="calendar-outline" size={15} color={checkOut ? AppColors.primary : AppColors.textSecondary} />
+          <Text style={[styles.dateChipText, checkOut && styles.dateChipTextActive]}>
+            {checkOut ? formatDate(checkOut) : 'Check-out'}
+          </Text>
+        </TouchableOpacity>
+
+        {(checkIn || checkOut) && (
+          <TouchableOpacity style={styles.clearDatesBtn} onPress={clearDates}>
+            <Ionicons name="close-circle" size={20} color={AppColors.danger} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Thông báo lọc theo ngày */}
+      {checkIn && checkOut && (
+        <View style={styles.filterBanner}>
+          <Ionicons name="checkmark-circle" size={16} color={AppColors.success} />
+          <Text style={styles.filterBannerText}>
+            Hiển thị {filteredRooms.length} phòng trống từ {formatDate(checkIn)} → {formatDate(checkOut)}
+          </Text>
+        </View>
+      )}
+
+      {/* ── Filter Chips ── */}
       <FlatList
         data={FILTERS}
         horizontal
@@ -175,21 +233,85 @@ export default function RoomList() {
           </TouchableOpacity>
         )}
       />
+    </>
+  );
 
-      {/* Room List */}
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient colors={Gradients.primary as [string, string]} style={styles.header}>
+        <Text style={styles.headerTitle}>Tìm Phòng</Text>
+        <Text style={styles.headerSubtitle}>{filteredRooms.length} phòng đang chờ bạn</Text>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={AppColors.textSecondary} />
+          <TextInput
+            placeholder="Tìm theo tên, địa điểm..."
+            placeholderTextColor={AppColors.textLight}
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={AppColors.textLight} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </LinearGradient>
+
+      {/* Room List với ListHeader */}
       <FlatList
-        data={filteredRooms}
+        data={isLoading ? [] : filteredRooms}
         keyExtractor={(item) => item.id}
         renderItem={renderRoom}
+        ListHeaderComponent={<ListHeader />}
         contentContainerStyle={styles.roomList}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={48} color={AppColors.textLight} />
-            <Text style={styles.emptyText}>Không tìm thấy phòng nào</Text>
-          </View>
+          !isLoading ? (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name={checkIn && checkOut ? 'bed-outline' : 'search-outline'}
+                size={56}
+                color={AppColors.textLight}
+              />
+              <Text style={styles.emptyText}>
+                {checkIn && checkOut
+                  ? 'Không có phòng trống trong khoảng thời gian này'
+                  : 'Không tìm thấy phòng nào'}
+              </Text>
+              {checkIn && checkOut && (
+                <TouchableOpacity style={styles.emptyAction} onPress={clearDates}>
+                  <Text style={styles.emptyActionText}>Xóa bộ lọc ngày</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>Đang tải...</Text>
+            </View>
+          )
         }
       />
+
+      {/* ── Native Date Picker ── */}
+      {showPicker && (
+        <DateTimePicker
+          value={
+            showPicker === 'checkIn'
+              ? checkIn ?? new Date()
+              : checkOut ?? (checkIn ? new Date(checkIn.getTime() + 86400000) : new Date())
+          }
+          mode="date"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          minimumDate={
+            showPicker === 'checkOut' && checkIn
+              ? new Date(checkIn.getTime() + 86400000) // checkOut tối thiểu là ngày sau checkIn
+              : new Date() // checkIn tối thiểu là hôm nay
+          }
+          onChange={onDateChange}
+        />
+      )}
     </View>
   );
 }
@@ -230,6 +352,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: AppColors.textPrimary,
   },
+  // ── Date Bar ──
+  dateBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.borderLight,
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    backgroundColor: AppColors.background,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+  },
+  dateChipActive: {
+    borderColor: AppColors.primary,
+    backgroundColor: AppColors.primary + '10',
+  },
+  dateChipText: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+    fontWeight: '500',
+  },
+  dateChipTextActive: {
+    color: AppColors.primary,
+    fontWeight: '600',
+  },
+  clearDatesBtn: {
+    marginLeft: Spacing.sm,
+    padding: 4,
+  },
+  filterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    backgroundColor: AppColors.success + '15',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+  },
+  filterBannerText: {
+    fontSize: 12,
+    color: AppColors.success,
+    fontWeight: '500',
+    flex: 1,
+  },
+  // ── Filter chips ──
   filterList: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
@@ -260,13 +439,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  // ── Room cards ──
   roomList: {
-    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.huge,
   },
   roomCard: {
     backgroundColor: '#fff',
     borderRadius: Radius.lg,
+    marginHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
     ...Shadows.medium,
     overflow: 'hidden',
@@ -298,17 +478,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
     letterSpacing: 0.5,
-  },
-  heartBtn: {
-    position: 'absolute',
-    top: Spacing.md,
-    right: Spacing.md,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   priceOverlay: {
     position: 'absolute',
@@ -373,14 +542,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
+  // ── Empty state ──
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: Spacing.huge,
+    paddingHorizontal: Spacing.lg,
   },
   emptyText: {
     fontSize: 16,
     color: AppColors.textSecondary,
     marginTop: Spacing.md,
+    textAlign: 'center',
+  },
+  emptyAction: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    backgroundColor: AppColors.primary,
+    borderRadius: Radius.md,
+  },
+  emptyActionText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

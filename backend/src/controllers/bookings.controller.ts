@@ -1,7 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { sendBookingConfirmationEmail } from '../services/email.service';
-import type { CreateBookingInput, UpdateBookingStatusInput, BookingQueryInput } from '../validators/bookings.validator';
+import { createNotification } from '../utils/notification.helper';
+import type { BookingQueryInput, CreateBookingInput, UpdateBookingStatusInput } from '../validators/bookings.validator';
 
 // ══════════════════════════════════════════════
 // BOOKINGS CONTROLLER
@@ -45,10 +46,13 @@ export async function createBooking(req: Request, res: Response, next: NextFunct
       return;
     }
 
+    // Chú thích hoặc xóa kiểm tra cứng nhắc để linh hoạt hơn (đã có kiểm tra conflict bên dưới)
+    /*
     if (room.status !== 'AVAILABLE') {
       res.status(400).json({ success: false, message: 'Phòng hiện không có sẵn để đặt' });
       return;
     }
+    */
 
     // Kiểm tra phòng đã có booking trong khoảng ngày này chưa
     const conflict = await prisma.booking.findFirst({
@@ -272,6 +276,29 @@ export async function updateBookingStatus(req: Request, res: Response, next: Nex
           guests: booking.guestsCount,
         }
       ).catch(console.error);
+    }
+
+    // ── GỬI THÔNG BÁO TRONG ỨNG DỤNG ──
+    try {
+      let notifTitle = '';
+      let notifMessage = '';
+
+      if (status === 'CONFIRMED') {
+        notifTitle = 'Đơn đặt phòng đã được xác nhận! ✅';
+        notifMessage = `Phòng "${booking.room.name}" của bạn đã được xác nhận thành công. Hẹn gặp bạn vào ngày ${booking.checkInDate.toLocaleDateString('vi-VN')}.`;
+      } else if (status === 'CANCELLED') {
+        notifTitle = 'Đơn đặt phòng bị hủy ❌';
+        notifMessage = `Rất tiếc, đơn đặt phòng "${booking.room.name}" của bạn đã bị hủy. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết.`;
+      } else if (status === 'COMPLETED') {
+        notifTitle = 'Chuyến đi hoàn tất 🏨';
+        notifMessage = `Cảm ơn bạn đã sử dụng dịch vụ tại LuxStay. Chúc bạn có những trải nghiệm tuyệt vời!`;
+      }
+
+      if (notifTitle) {
+        await createNotification(booking.userId, notifTitle, notifMessage, 'BOOKING');
+      }
+    } catch (notifError) {
+      console.error('Lỗi khi gửi thông báo (không làm gián đoạn booking):', notifError);
     }
 
     res.status(200).json({

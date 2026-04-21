@@ -7,6 +7,7 @@ export default function ProfileLayout() {
       <Stack.Screen name="favorites" />
       <Stack.Screen name="payment-methods" />
       <Stack.Screen name="notifications" />
+      <Stack.Screen name="notification-center" />
       <Stack.Screen name="language" />
       <Stack.Screen name="help" />
       <Stack.Screen name="about" />

@@ -3,12 +3,22 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, TextInput, Alert, ActivityIndicator, Platform,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppColors, Shadows, Radius, Spacing, Gradients } from '../../../constants/theme';
 import { apiClient } from '../../../services/api';
+
+// Cấu hình ngôn ngữ tiếng Việt cho Lịch
+LocaleConfig.locales['vi'] = {
+  monthNames: ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'],
+  monthNamesShort: ['Th.1','Th.2','Th.3','Th.4','Th.5','Th.6','Th.7','Th.8','Th.9','Th.10','Th.11','Th.12'],
+  dayNames: ['Chủ Nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'],
+  dayNamesShort: ['CN','T2','T3','T4','T5','T6','T7'],
+  today: 'Hôm nay'
+};
+LocaleConfig.defaultLocale = 'vi';
 
 export default function BookingForm() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -17,16 +27,15 @@ export default function BookingForm() {
   const [room, setRoom] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isWeb = Platform.OS === 'web';
   
-  const [checkIn, setCheckIn] = useState(new Date());
-  const [checkOut, setCheckOut] = useState(() => {
+  // State quản lý dải ngày
+  const [startDate, setStartDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string | null>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 2);
-    return d;
+    return d.toISOString().split('T')[0];
   });
-  const [showInPicker, setShowInPicker] = useState(false);
-  const [showOutPicker, setShowOutPicker] = useState(false);
+
   const [guests, setGuests] = useState(2);
   const [rooms, setRooms] = useState(1);
   const [specialRequest, setSpecialRequest] = useState('');
@@ -56,39 +65,26 @@ export default function BookingForm() {
     try {
       setIsSubmitting(true);
       
-      // Chuyển đổi ngày sang định dạng ISO cho Backend (YYYY-MM-DD)
-
-      const isoCheckIn = toISO(checkIn);
-      const isoCheckOut = toISO(checkOut);
-
-      // Kiểm tra dữ liệu đầu vào trước khi gửi
       if (!roomId) {
-        Alert.alert('Lỗi', 'Thiếu mã phòng. Vui lòng quay lại trang chi tiết và thử lại.');
+        Alert.alert('Lỗi', 'Thiếu mã phòng.');
         setIsSubmitting(false);
         return;
       }
 
-      if (!isoCheckIn || !isoCheckOut) {
-        Alert.alert('Lỗi', 'Định dạng ngày tháng không hợp lệ (dd/mm/yyyy).');
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (nights <= 0) {
-        Alert.alert('Lỗi', 'Ngày trả phòng phải sau ngày nhận phòng.');
+      if (!startDate || !endDate) {
+        Alert.alert('Lỗi', 'Vui lòng chọn cả ngày nhận và ngày trả phòng.');
         setIsSubmitting(false);
         return;
       }
 
       const bookingData = {
         roomId,
-        checkInDate: isoCheckIn,
-        checkOutDate: isoCheckOut,
+        checkInDate: startDate,
+        checkOutDate: endDate,
         guestsCount: guests,
         roomsCount: rooms,
         specialRequest,
-        paymentMethod: 'MOMO',
-        // Thêm thông tin phòng để hiển thị bên trang payment mà không cần fetch lại
+        paymentMethod: 'VIETQR',
         roomName: room?.name,
         nightCount: nights,
         totalPrice: total,
@@ -96,7 +92,6 @@ export default function BookingForm() {
 
       console.log('[Booking Data Prepared]:', JSON.stringify(bookingData, null, 2));
 
-      // Không gọi API ở đây, chuyển sang trang payment với toàn bộ data
       router.push({
         pathname: '/(tabs)/booking/payment',
         params: { bookingData: JSON.stringify(bookingData) }
@@ -109,69 +104,78 @@ export default function BookingForm() {
     }
   };
 
-  // Chuyển đổi ngày sang định dạng ISO cho Backend (YYYY-MM-DD)
-  const toISO = (date: Date) => {
-    return date.toISOString().split('T')[0];
-  };
+  const onDayPress = (day: any) => {
+    const dateString = day.dateString;
 
-  // Tính toán số đêm và tổng tiền
-  const calculateNights = (start: Date, end: Date) => {
-    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    const diffTime = e.getTime() - s.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-  };
-
-  const formatDateDisplay = (date: Date) => {
-    const d = date.getDate().toString().padStart(2, '0');
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
-  };
-
-  // Hàm chuẩn hóa ngày về 00:00:00 để so sánh chính xác
-  const normalizeDate = (date: Date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
-
-  const onInDateChange = (event: any, selectedDate?: Date) => {
-    // Với Android, Picker tự đóng sau khi chọn hoặc cancel
-    if (Platform.OS === 'android') {
-      setShowInPicker(false);
-      if (event.type === 'set' && selectedDate) {
-        const normalized = normalizeDate(selectedDate);
-        setCheckIn(normalized);
-        if (normalized >= normalizeDate(checkOut)) {
-          const newOut = new Date(normalized);
-          newOut.setDate(newOut.getDate() + 1);
-          setCheckOut(newOut);
-        }
-      }
-    } else {
-      // Với iOS, cập nhật giá trị liên tục khi quay spinner
-      if (selectedDate) {
-        setCheckIn(selectedDate);
+    if (!startDate || (startDate && endDate)) {
+      // Bắt đầu chọn dải mới
+      setStartDate(dateString);
+      setEndDate(null);
+    } else if (startDate && !endDate) {
+      // Đã có start, giờ chọn end
+      if (dateString > startDate) {
+        setEndDate(dateString);
+      } else {
+        // Nếu chọn ngày trước start, gán lại làm start mới
+        setStartDate(dateString);
       }
     }
   };
 
-  const onOutDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowOutPicker(false);
-      if (event.type === 'set' && selectedDate) {
-        setCheckOut(normalizeDate(selectedDate));
-      }
-    } else {
-      if (selectedDate) {
-        setCheckOut(selectedDate);
+  // Tính toán các ngày được đánh dấu trên lịch
+  const getMarkedDates = () => {
+    const marked: any = {};
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Đánh dấu ngày hôm nay
+    marked[today] = { textColor: AppColors.primary, fontWeight: 'bold' };
+
+    if (startDate) {
+      marked[startDate] = {
+        startingDay: true,
+        color: AppColors.primary,
+        textColor: '#fff',
+        selected: true,
+      };
+    }
+
+    if (endDate) {
+      marked[endDate] = {
+        endingDay: true,
+        color: AppColors.primary,
+        textColor: '#fff',
+        selected: true,
+      };
+
+      // Tô màu các ngày ở giữa
+      let start = new Date(startDate!);
+      let end = new Date(endDate);
+      let curr = new Date(start);
+      curr.setDate(curr.getDate() + 1);
+
+      while (curr < end) {
+        const iso = curr.toISOString().split('T')[0];
+        marked[iso] = {
+          color: AppColors.primary + '20',
+          textColor: AppColors.primary,
+          selected: true,
+        };
+        curr.setDate(curr.getDate() + 1);
       }
     }
+
+    return marked;
   };
 
-  const nights = calculateNights(normalizeDate(checkIn), normalizeDate(checkOut));
+  // Tính số đêm dựa trên chuỗi ngày YYYY-MM-DD
+  const nights = React.useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diff = end.getTime() - start.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }, [startDate, endDate]);
+
   const roomPrice = room ? Number(room.pricePerNight) : 0;
   const subtotal = roomPrice * nights * rooms;
   const tax = subtotal * 0.1;
@@ -218,123 +222,65 @@ export default function BookingForm() {
           </View>
         </View>
 
-        {/* Date Selection */}
+        {/* Date Selection - New Calendar View */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 Ngày lưu trú</Text>
-          <View style={styles.dateRow}>
-            <View style={styles.dateCard}>
-              <Text style={styles.dateLabel}>Nhận phòng</Text>
-              <TouchableOpacity 
-                style={styles.dateInputContainer}
-                onPress={() => {
-                  console.log('[DEBUG] Press Nhận phòng, follows logic for:', Platform.OS);
-                  if (isWeb) {
-                    // Trên Web dùng input date chuẩn nếu có thể, hoặc thông báo
-                    if (typeof window !== 'undefined') {
-                      window.alert('Tính năng chọn lịch này hoạt động tốt nhất trên app điện thoại. Trên web anh hãy nhập theo định dạng YYYY-MM-DD nhé!');
-                    }
-                  } else {
-                    setShowInPicker(true);
-                  }
-                }}
-              >
-                <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
-                {isWeb ? (
-                   <TextInput
-                    style={styles.dateInputWeb}
-                    value={toISO(checkIn)}
-                    onChangeText={(val) => {
-                      const d = new Date(val);
-                      if (!isNaN(d.getTime())) setCheckIn(normalizeDate(d));
-                    }}
-                    placeholder="YYYY-MM-DD"
-                  />
-                ) : (
-                  <Text style={styles.dateInputText}>{formatDateDisplay(checkIn)}</Text>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.dateHint}>14:00</Text>
-              {showInPicker && Platform.OS !== 'web' && (
-                <View>
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity 
-                      style={{ alignSelf: 'flex-end', padding: 5 }} 
-                      onPress={() => setShowInPicker(false)}
-                    >
-                      <Text style={{ color: AppColors.primary, fontWeight: 'bold' }}>Xong</Text>
-                    </TouchableOpacity>
-                  )}
-                  <DateTimePicker
-                    value={checkIn}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
-                    minimumDate={normalizeDate(new Date())}
-                    onChange={onInDateChange}
-                  />
-                </View>
-              )}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>📅 Chọn ngày lưu trú</Text>
+            <View style={styles.nightBadge}>
+              <Text style={styles.nightBadgeText}>{nights} đêm</Text>
             </View>
-            <View style={styles.dateArrow}>
-              <Ionicons name="arrow-forward" size={20} color={AppColors.textLight} />
-              <Text style={styles.nightCount}>{nights} đêm</Text>
+          </View>
+          
+          <View style={styles.calendarContainer}>
+            <Calendar
+              markingType={'period'}
+              markedDates={getMarkedDates()}
+              onDayPress={onDayPress}
+              minDate={new Date().toISOString().split('T')[0]}
+              theme={{
+                calendarBackground: '#fff',
+                textSectionTitleColor: AppColors.textSecondary,
+                selectedDayBackgroundColor: AppColors.primary,
+                selectedDayTextColor: '#ffffff',
+                todayTextColor: AppColors.accent,
+                dayTextColor: AppColors.textPrimary,
+                textDisabledColor: AppColors.textLight,
+                dotColor: AppColors.primary,
+                selectedDotColor: '#ffffff',
+                arrowColor: AppColors.primary,
+                monthTextColor: AppColors.primary,
+                indicatorColor: AppColors.primary,
+                textDayFontWeight: '400',
+                textMonthFontWeight: '700',
+                textDayHeaderFontWeight: '600',
+                textDayFontSize: 14,
+                textMonthFontSize: 16,
+                textDayHeaderFontSize: 12
+              }}
+            />
+          </View>
+
+          {/* Date Summary */}
+          <View style={styles.dateSummaryRow}>
+            <View style={styles.dateSummaryBox}>
+              <Text style={styles.dateSummaryLabel}>NHẬN PHÒNG</Text>
+              <Text style={styles.dateSummaryValue}>
+                {startDate ? new Date(startDate).toLocaleDateString('vi-VN') : 'Chọn ngày'}
+              </Text>
             </View>
-            <View style={styles.dateCard}>
-              <Text style={styles.dateLabel}>Trả phòng</Text>
-              <TouchableOpacity 
-                style={styles.dateInputContainer}
-                onPress={() => {
-                  console.log('[DEBUG] Press Trả phòng');
-                  if (isWeb) {
-                    if (typeof window !== 'undefined') {
-                      window.alert('Trên web anh hãy nhập theo định dạng YYYY-MM-DD!');
-                    }
-                  } else {
-                    setShowOutPicker(true);
-                  }
-                }}
-              >
-                <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
-                {isWeb ? (
-                   <TextInput
-                    style={styles.dateInputWeb}
-                    value={toISO(checkOut)}
-                    onChangeText={(val) => {
-                      const d = new Date(val);
-                      if (!isNaN(d.getTime())) setCheckOut(normalizeDate(d));
-                    }}
-                    placeholder="YYYY-MM-DD"
-                  />
-                ) : (
-                  <Text style={styles.dateInputText}>{formatDateDisplay(checkOut)}</Text>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.dateHint}>12:00</Text>
-              {showOutPicker && Platform.OS !== 'web' && (
-                <View>
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity 
-                      style={{ alignSelf: 'flex-end', padding: 5 }} 
-                      onPress={() => setShowOutPicker(false)}
-                    >
-                      <Text style={{ color: AppColors.primary, fontWeight: 'bold' }}>Xong</Text>
-                    </TouchableOpacity>
-                  )}
-                  <DateTimePicker
-                    value={checkOut}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
-                    minimumDate={new Date(normalizeDate(checkIn).getTime() + 86400000)}
-                    onChange={onOutDateChange}
-                  />
-                </View>
-              )}
+            <Ionicons name="arrow-forward" size={16} color={AppColors.textLight} />
+            <View style={styles.dateSummaryBox}>
+              <Text style={styles.dateSummaryLabel}>TRẢ PHÒNG</Text>
+              <Text style={styles.dateSummaryValue}>
+                {endDate ? new Date(endDate).toLocaleDateString('vi-VN') : 'Chọn ngày'}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Guests */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>👥 Số lượng</Text>
+          <Text style={styles.sectionTitle}>👥 Số lượng khách & phòng</Text>
           <View style={styles.guestRow}>
             <View style={styles.guestItem}>
               <View>
@@ -397,7 +343,7 @@ export default function BookingForm() {
         </View>
 
         {/* Price Breakdown */}
-        <View style={[styles.section, { marginBottom: 100 }]}>
+        <View style={[styles.section, { marginBottom: 150 }]}>
           <Text style={styles.sectionTitle}>💰 Chi tiết giá</Text>
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
@@ -438,8 +384,8 @@ export default function BookingForm() {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <Text style={styles.continueBtnText}>Tiếp tục</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
+                <Text style={styles.continueBtnText}>Xác nhận đặt phòng</Text>
+                <Ionicons name="chevron-forward" size={20} color="#fff" />
               </>
             )}
           </LinearGradient>
@@ -480,24 +426,22 @@ const styles = StyleSheet.create({
   ratingText: { fontSize: 12, color: AppColors.textSecondary },
 
   section: { marginHorizontal: Spacing.lg, marginTop: Spacing.lg },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: AppColors.textPrimary, marginBottom: Spacing.md },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: AppColors.textPrimary },
+  
+  nightBadge: { backgroundColor: AppColors.primary + '10', paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.sm },
+  nightBadgeText: { color: AppColors.primary, fontSize: 12, fontWeight: '600' },
 
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  dateCard: {
-    flex: 1, backgroundColor: '#fff', borderRadius: Radius.md,
-    padding: Spacing.md, ...Shadows.small,
+  calendarContainer: {
+    backgroundColor: '#fff', borderRadius: Radius.lg,
+    overflow: 'hidden', ...Shadows.small, marginBottom: Spacing.md,
+    padding: Spacing.xs,
   },
-  dateLabel: { fontSize: 12, color: AppColors.textSecondary, marginBottom: 6 },
-  dateInputContainer: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderBottomWidth: 1, borderBottomColor: AppColors.borderLight, paddingBottom: 6,
-    minHeight: 30,
-  },
-  dateInputText: { fontSize: 15, fontWeight: '600', color: AppColors.textPrimary },
-  dateInputWeb: { fontSize: 14, fontWeight: '600', color: AppColors.textPrimary, flex: 1, padding: 0 },
-  dateHint: { fontSize: 11, color: AppColors.textLight, marginTop: 4 },
-  dateArrow: { alignItems: 'center', gap: 2 },
-  nightCount: { fontSize: 10, color: AppColors.textLight, fontWeight: '600' },
+
+  dateSummaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: Spacing.md, borderRadius: Radius.md, ...Shadows.small },
+  dateSummaryBox: { flex: 1, alignItems: 'center' },
+  dateSummaryLabel: { fontSize: 10, color: AppColors.textLight, marginBottom: 2, letterSpacing: 0.5 },
+  dateSummaryValue: { fontSize: 14, fontWeight: '700', color: AppColors.textPrimary },
 
   guestRow: { backgroundColor: '#fff', borderRadius: Radius.md, ...Shadows.small },
   guestItem: {
@@ -543,7 +487,7 @@ const styles = StyleSheet.create({
   bottomPrice: { fontSize: 22, fontWeight: 'bold', color: AppColors.primary },
   continueBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 24, paddingVertical: 14, borderRadius: Radius.md,
+    paddingHorizontal: 20, paddingVertical: 14, borderRadius: Radius.md,
   },
   continueBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });

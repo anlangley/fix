@@ -18,6 +18,8 @@ import reviewRoutes from './routes/reviews.routes';
 import roomsRoutes from './routes/rooms.routes';
 import uploadRoutes from './routes/upload.routes';
 import favoritesRoutes from './routes/favorites.routes';
+import notificationRoutes from './routes/notifications.routes';
+import { initJobs } from './jobs/booking.jobs';
 
 // ══════════════════════════════════════════════
 // EXPRESS APP SETUP
@@ -90,6 +92,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/favorites', favoritesRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ── 404 Handler ───────────────────────────────
 app.use((_req, res) => {
@@ -108,6 +111,9 @@ async function startServer() {
     // Test DB connection
     await prisma.$connect();
     console.log('✅ Database connected successfully');
+
+    // Run scheduled jobs
+    initJobs();
 
     app.listen(env.PORT, '0.0.0.0', () => {
       console.log('');

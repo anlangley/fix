@@ -25,6 +25,7 @@ model User {
   bookings            Booking[]
   reviews             Review[]
   favorites           Favorite[]
+  notifications       Notification[]
 
   @@map("Users")
 }
@@ -136,4 +137,17 @@ model Favorite {
 
   @@unique([userId, roomId])
   @@map("Favorites")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String   @db.NVarChar(200)
+  message   String   @db.NVarChar(Max)
+  type      String   @default("INFO") // BOOKING, SYSTEM, PROMOTION
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("Notifications")
 }

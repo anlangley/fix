@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   Dimensions, Image,
   ImageBackground,
@@ -92,12 +93,44 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // ── Date Picker State ──
+  const [checkIn, setCheckIn] = useState<Date | null>(null);
+  const [checkOut, setCheckOut] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState<'checkIn' | 'checkOut' | null>(null);
+
+  const formatDate = (date: Date) =>
+    date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
 
   useEffect(() => {
     fetchFeaturedRooms();
     fetchFavoriteIds();
-    fetchAvatar();
+    fetchUserProfile();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchUnreadNotifCount();
+      }
+    }, [user])
+  );
+
+  const fetchUnreadNotifCount = async () => {
+    try {
+      if (!user) return;
+      const response = await apiClient.get('/notifications/unread-count');
+      if (response.data?.success) {
+        setUnreadCount(response.data.data.count);
+      }
+    } catch (error) {
+      // Chỉ log lỗi nếu không phải là lỗi 401 (để tránh rác console khi logout)
+      if (error.response?.status !== 401) {
+        console.error('Error fetching unread count:', error);
+      }
+    }
+  };
 
   const fetchFeaturedRooms = async () => {
     try {
@@ -114,13 +147,30 @@ export default function HomeScreen() {
 
   const fetchFavoriteIds = async () => {
     try {
+      if (!user) return;
       const res = await apiClient.get('/favorites');
       if (res.data?.success) {
         const ids = new Set<string>(res.data.data.favorites.map((f: any) => f.room.id));
         setFavoriteIds(ids);
       }
     } catch (error) {
-      // Chưa login thì bỏ qua
+      if (error.response?.status !== 401) {
+        console.error('Error fetching favorites:', error);
+      }
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      if (!user) return;
+      const res = await apiClient.get('/auth/me');
+      if (res.data?.success) {
+        setAvatarUrl(res.data.data.user.avatarUrl || null);
+      }
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        console.error('Error fetching profile:', error);
+      }
     }
   };
 
@@ -147,15 +197,6 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchAvatar = async () => {
-    try {
-      const res = await apiClient.get('/auth/me');
-      if (res.data?.success) {
-        setAvatarUrl(res.data.data.user.avatarUrl || null);
-      }
-    } catch (error) {}
-  };
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* ═══ HEADER ═══ */}
@@ -178,22 +219,95 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/profile/favorites' as any)}>
               <Ionicons name="heart" size={24} color={AppColors.danger} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIcon}>
-              <View style={styles.notifBadge} />
+            <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/profile/notification-center' as any)}>
+              {unreadCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
               <Ionicons name="notifications-outline" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Search Bar */}
-        <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/(tabs)/rooms')}>
-          <Ionicons name="search" size={20} color={AppColors.textSecondary} />
-          <Text style={styles.searchPlaceholder}>Tìm kiếm khách sạn, phòng...</Text>
-          <View style={styles.searchFilter}>
-            <Ionicons name="options-outline" size={18} color={AppColors.accent} />
+        {/* ── Search & Date Panel ── */}
+        <View style={styles.searchPanel}>
+          <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/(tabs)/rooms')}>
+            <Ionicons name="search" size={20} color={AppColors.textSecondary} />
+            <Text style={styles.searchPlaceholder}>Tìm kiếm khách sạn, phòng...</Text>
+          </TouchableOpacity>
+
+          <View style={styles.dateSelectorRow}>
+            <TouchableOpacity style={styles.dateBox} onPress={() => setShowPicker('checkIn')}>
+              <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
+              <View>
+                <Text style={styles.dateLabel}>Nhận phòng</Text>
+                <Text style={styles.dateValue}>{checkIn ? formatDate(checkIn) : 'Chọn ngày'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.dateDivider} />
+
+            <TouchableOpacity style={styles.dateBox} onPress={() => setShowPicker('checkOut')}>
+              <Ionicons name="calendar-outline" size={18} color={AppColors.accent} />
+              <View>
+                <Text style={styles.dateLabel}>Trả phòng</Text>
+                <Text style={styles.dateValue}>{checkOut ? formatDate(checkOut) : 'Chọn ngày'}</Text>
+              </View>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={() => {
+              const params: any = {};
+              if (checkIn) params.checkIn = checkIn.toISOString().split('T')[0];
+              if (checkOut) params.checkOut = checkOut.toISOString().split('T')[0];
+              router.push({ pathname: '/(tabs)/rooms', params });
+            }}
+          >
+            <LinearGradient
+              colors={['#FFAD33', '#FF8C00']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.searchBtnGradient}
+            >
+              <Text style={styles.searchBtnText}>TÌM KIẾM PHÒNG TRỐNG</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
+
+      {/* Date Pickers */}
+      {showPicker && (
+        <DateTimePicker
+          value={
+            showPicker === 'checkIn'
+              ? checkIn || new Date()
+              : checkOut || (checkIn ? new Date(checkIn.getTime() + 86400000) : new Date())
+          }
+          mode="date"
+          display="default"
+          minimumDate={
+            showPicker === 'checkOut' && checkIn
+              ? new Date(checkIn.getTime() + 86400000)
+              : new Date()
+          }
+          onChange={(event, date) => {
+            setShowPicker(null);
+            if (date) {
+              if (showPicker === 'checkIn') {
+                setCheckIn(date);
+                if (checkOut && date >= checkOut) {
+                  setCheckOut(new Date(date.getTime() + 86400000));
+                }
+              } else {
+                setCheckOut(date);
+              }
+            }
+          }}
+        />
+      )}
 
       {/* ═══ BANNER CAROUSEL ═══ */}
       <View style={styles.section}>
@@ -415,13 +529,22 @@ const styles = StyleSheet.create({
   },
   notifBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: AppColors.danger,
-    zIndex: 1,
+    borderWidth: 1.5,
+    borderColor: AppColors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  notifBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   searchBar: {
     flexDirection: 'row',
@@ -444,6 +567,61 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.background,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // ── Search Panel ──
+  searchPanel: {
+    backgroundColor: '#fff',
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginTop: Spacing.sm,
+    ...Shadows.medium,
+  },
+  dateSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: AppColors.borderLight,
+  },
+  dateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    flex: 1,
+  },
+  dateDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: AppColors.borderLight,
+    marginHorizontal: Spacing.md,
+  },
+  dateLabel: {
+    fontSize: 12,
+    color: AppColors.textLight,
+  },
+  dateValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: AppColors.textPrimary,
+  },
+  searchBtn: {
+    marginTop: Spacing.lg,
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+  },
+  searchBtnGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+    letterSpacing: 1,
   },
   // ─── Sections ───
   section: {

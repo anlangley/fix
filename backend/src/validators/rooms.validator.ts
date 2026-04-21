@@ -58,9 +58,21 @@ export const roomQuerySchema = z.object({
   location: z.string().optional(),
   minPrice: z.coerce.number().positive().optional(),
   maxPrice: z.coerce.number().positive().optional(),
+  checkIn: z.string().datetime({ offset: true }).optional()
+    .or(z.string().date().optional()),
+  checkOut: z.string().datetime({ offset: true }).optional()
+    .or(z.string().date().optional()),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
-});
+}).refine(
+  (data) => {
+    if (data.checkIn && data.checkOut) {
+      return new Date(data.checkOut) > new Date(data.checkIn);
+    }
+    return true;
+  },
+  { message: 'Ngày check-out phải sau ngày check-in', path: ['checkOut'] }
+);
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
 export type UpdateRoomInput = z.infer<typeof updateRoomSchema>;

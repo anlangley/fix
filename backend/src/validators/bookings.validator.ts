@@ -40,7 +40,7 @@ export const createBookingSchema = z
       .max(500, 'Yêu cầu đặc biệt không được quá 500 ký tự')
       .optional(),
 
-    paymentMethod: z.enum(['MOMO', 'VNPAY', 'ZALOPAY', 'CARD', 'CASH']).optional(),
+    paymentMethod: z.enum(['MOMO', 'VNPAY', 'ZALOPAY', 'CARD', 'CASH', 'VIETQR']).optional(),
   })
   .refine(
     (data) => {
